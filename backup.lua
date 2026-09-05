@@ -899,21 +899,34 @@ local function main()
 	local iconData
 	local remote_blocklist = {} -- list of remotes beng blocked, k = the remote instance, v = their old function :3
 	local activeWorldHighlight
+	local activeWorldHighlights = {}
+	local activeWorldObject
 	local pathPreviewFolder
 	local pathPreviewRunning = false
 	nodes = nodes or {}
 
 	Explorer.HighlightObject = function(obj)
-		if activeWorldHighlight then
-			activeWorldHighlight:Destroy()
-			activeWorldHighlight = nil
-		end
+		Explorer.ClearWorldHighlight()
 		if not obj or not obj:IsDescendantOf(game) then return false end
-		local target = obj
-		if not target:IsA("Model") and not target:IsA("BasePart") then
-			target = target:FindFirstAncestorWhichIsA("Model") or target:FindFirstAncestorWhichIsA("BasePart")
+		local targets = {}
+		if obj:IsA("Model") or obj:IsA("BasePart") then
+			targets[1] = obj
+		else
+			local ancestor = obj:FindFirstAncestorWhichIsA("Model") or obj:FindFirstAncestorWhichIsA("BasePart")
+			if ancestor then
+				targets[1] = ancestor
+			else
+				for _,descendant in ipairs(obj:GetDescendants()) do
+					if descendant:IsA("Model") and not descendant:FindFirstAncestorWhichIsA("Model") then
+						targets[#targets+1] = descendant
+					elseif descendant:IsA("BasePart") and not descendant:FindFirstAncestorWhichIsA("Model") then
+						targets[#targets+1] = descendant
+					end
+					if #targets >= 50 then break end
+				end
+			end
 		end
-		if not target then return false end
+		if #targets == 0 then return false end
 		local highlightColors = {
 			Cyan = Color3.fromRGB(0,170,255),
 			Red = Color3.fromRGB(255,70,70),
@@ -921,21 +934,28 @@ local function main()
 			Green = Color3.fromRGB(60,220,120)
 		}
 		local highlightColor = Settings.Explorer.HighlightMode == "Theme" and Settings.Theme.Highlight or highlightColors[Settings.Explorer.HighlightMode] or Settings.Theme.Highlight
-		local highlight = Instance.new("Highlight")
-		highlight.Name = "DexExplorerHighlight"
-		highlight.Adornee = target
-		highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-		highlight.FillColor = highlightColor
-		highlight.FillTransparency = 0.72
-		highlight.OutlineColor = Settings.Explorer.HighlightMode == "Theme" and Settings.Theme.ListSelection or highlightColor
-		highlight.OutlineTransparency = 0
-		highlight.Parent = workspace
-		activeWorldHighlight = highlight
+		for _,target in ipairs(targets) do
+			local highlight = Instance.new("Highlight")
+			highlight.Name = "DexExplorerHighlight"
+			highlight.Adornee = target
+			highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+			highlight.FillColor = highlightColor
+			highlight.FillTransparency = 0.72
+			highlight.OutlineColor = Settings.Explorer.HighlightMode == "Theme" and Settings.Theme.ListSelection or highlightColor
+			highlight.OutlineTransparency = 0
+			highlight.Parent = workspace
+			activeWorldHighlights[#activeWorldHighlights+1] = highlight
+			activeWorldHighlight = highlight
+		end
+		activeWorldObject = obj
 		return true
 	end
 
 	Explorer.ClearWorldHighlight = function()
-		if activeWorldHighlight then activeWorldHighlight:Destroy() activeWorldHighlight = nil end
+		for _,highlight in ipairs(activeWorldHighlights) do highlight:Destroy() end
+		table.clear(activeWorldHighlights)
+		activeWorldHighlight = nil
+		activeWorldObject = nil
 		return true
 	end
 
@@ -966,9 +986,13 @@ local function main()
 			if not currentRoot or not targetPart.Parent then Explorer.StopPathPreview() return end
 			local path = service.PathfindingService:CreatePath({AgentRadius = 2, AgentHeight = 5, AgentCanJump = true, WaypointSpacing = 3})
 			local ok = pcall(path.ComputeAsync,path,currentRoot.Position,targetPart.Position)
-			if not ok or path.Status ~= Enum.PathStatus.Success then clearPathPreviewVisuals() return end
 			clearPathPreviewVisuals()
-			local waypoints = path:GetWaypoints()
+			local waypoints
+			if ok and path.Status == Enum.PathStatus.Success then
+				waypoints = path:GetWaypoints()
+			else
+				waypoints = {{Position = currentRoot.Position},{Position = targetPart.Position}}
+			end
 			for index = 1,#waypoints do
 				local point = Instance.new("Part")
 				point.Name = "Waypoint"
@@ -984,6 +1008,15 @@ local function main()
 					local nextPosition = waypoints[index + 1].Position + Vector3.new(0,0.12,0)
 					local currentPosition = waypoints[index].Position + Vector3.new(0,0.12,0)
 					local distance = (nextPosition-currentPosition).Magnitude
+					local segment = Instance.new("Part")
+					segment.Name = "PathSegment"
+					segment.Size = Vector3.new(0.22,0.08,math.max(distance,0.5))
+					segment.CFrame = CFrame.lookAt((currentPosition+nextPosition)/2,nextPosition)
+					segment.Anchored = true
+					segment.CanCollide = false
+					segment.Material = Enum.Material.Neon
+					segment.Color = Settings.Theme.Highlight
+					segment.Parent = pathPreviewFolder
 					local arrow = Instance.new("WedgePart")
 					arrow.Name = "PathArrow"
 					arrow.Size = Vector3.new(0.8,0.12,math.max(distance,0.5))
@@ -2112,7 +2145,7 @@ local function main()
 		context:Register("HIGHLIGHT_OBJECT",{Name = "Highlight in World", OnClick = function()
 			local node = selection.List[1]
 			if not node or not node.Obj then return end
-			if activeWorldHighlight and activeWorldHighlight.Adornee == node.Obj then
+			if activeWorldObject == node.Obj then
 				Explorer.ClearWorldHighlight()
 			else
 				Explorer.HighlightObject(node.Obj)
