@@ -899,6 +899,8 @@ local function main()
 	local iconData
 	local remote_blocklist = {} -- list of remotes beng blocked, k = the remote instance, v = their old function :3
 	local activeWorldHighlight
+	local pathPreviewFolder
+	local pathPreviewRunning = false
 	nodes = nodes or {}
 
 	Explorer.HighlightObject = function(obj)
@@ -912,13 +914,20 @@ local function main()
 			target = target:FindFirstAncestorWhichIsA("Model") or target:FindFirstAncestorWhichIsA("BasePart")
 		end
 		if not target then return false end
+		local highlightColors = {
+			Cyan = Color3.fromRGB(0,170,255),
+			Red = Color3.fromRGB(255,70,70),
+			Gold = Color3.fromRGB(255,190,40),
+			Green = Color3.fromRGB(60,220,120)
+		}
+		local highlightColor = Settings.Explorer.HighlightMode == "Theme" and Settings.Theme.Highlight or highlightColors[Settings.Explorer.HighlightMode] or Settings.Theme.Highlight
 		local highlight = Instance.new("Highlight")
 		highlight.Name = "DexExplorerHighlight"
 		highlight.Adornee = target
 		highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-		highlight.FillColor = Settings.Theme.Highlight
+		highlight.FillColor = highlightColor
 		highlight.FillTransparency = 0.72
-		highlight.OutlineColor = Settings.Theme.ListSelection
+		highlight.OutlineColor = Settings.Explorer.HighlightMode == "Theme" and Settings.Theme.ListSelection or highlightColor
 		highlight.OutlineTransparency = 0
 		highlight.Parent = workspace
 		activeWorldHighlight = highlight
@@ -927,6 +936,73 @@ local function main()
 
 	Explorer.ClearWorldHighlight = function()
 		if activeWorldHighlight then activeWorldHighlight:Destroy() activeWorldHighlight = nil end
+		return true
+	end
+
+	local function clearPathPreviewVisuals()
+		if pathPreviewFolder then pathPreviewFolder:ClearAllChildren() end
+	end
+
+	Explorer.StopPathPreview = function()
+		pathPreviewRunning = false
+		if pathPreviewFolder then pathPreviewFolder:Destroy() pathPreviewFolder = nil end
+		return true
+	end
+
+	Explorer.ShowPathPreview = function(target)
+		Explorer.StopPathPreview()
+		if not target or not target:IsDescendantOf(game) then return false end
+		local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+		local targetPart = target:IsA("BasePart") and target or (target:IsA("Model") and (target.PrimaryPart or target:FindFirstChild("HumanoidRootPart",true)))
+		if not root or not targetPart then return false end
+		pathPreviewFolder = Instance.new("Folder")
+		pathPreviewFolder.Name = "DexPathPreview"
+		pathPreviewFolder.Parent = workspace
+		pathPreviewRunning = true
+
+		local function drawPath()
+			if not pathPreviewRunning or not pathPreviewFolder.Parent then return end
+			local currentRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+			if not currentRoot or not targetPart.Parent then Explorer.StopPathPreview() return end
+			local path = service.PathfindingService:CreatePath({AgentRadius = 2, AgentHeight = 5, AgentCanJump = true, WaypointSpacing = 3})
+			local ok = pcall(path.ComputeAsync,path,currentRoot.Position,targetPart.Position)
+			if not ok or path.Status ~= Enum.PathStatus.Success then clearPathPreviewVisuals() return end
+			clearPathPreviewVisuals()
+			local waypoints = path:GetWaypoints()
+			for index = 1,#waypoints do
+				local point = Instance.new("Part")
+				point.Name = "Waypoint"
+				point.Shape = Enum.PartType.Ball
+				point.Size = Vector3.new(0.45,0.45,0.45)
+				point.Position = waypoints[index].Position + Vector3.new(0,0.18,0)
+				point.Anchored = true
+				point.CanCollide = false
+				point.Material = Enum.Material.Neon
+				point.Color = Settings.Theme.Highlight
+				point.Parent = pathPreviewFolder
+				if index < #waypoints then
+					local nextPosition = waypoints[index + 1].Position + Vector3.new(0,0.12,0)
+					local currentPosition = waypoints[index].Position + Vector3.new(0,0.12,0)
+					local distance = (nextPosition-currentPosition).Magnitude
+					local arrow = Instance.new("WedgePart")
+					arrow.Name = "PathArrow"
+					arrow.Size = Vector3.new(0.8,0.12,math.max(distance,0.5))
+					arrow.CFrame = CFrame.lookAt((currentPosition+nextPosition)/2,nextPosition)
+					arrow.Anchored = true
+					arrow.CanCollide = false
+					arrow.Material = Enum.Material.Neon
+					arrow.Color = Settings.Theme.Highlight
+					arrow.Parent = pathPreviewFolder
+				end
+			end
+		end
+
+		task.spawn(function()
+			while pathPreviewRunning do
+				drawPath()
+				task.wait(5)
+			end
+		end)
 		return true
 	end
 
@@ -1774,6 +1850,9 @@ local function main()
 		context:AddRegistered("UNGROUP")
 		context:AddRegistered("SELECT_CHILDREN")
 		context:AddRegistered("HIGHLIGHT_OBJECT")
+		context:AddRegistered("UNHIGHLIGHT_OBJECT")
+		context:AddRegistered("PATH_PREVIEW")
+		context:AddRegistered("STOP_PATH_PREVIEW")
 		context:AddRegistered("JUMP_TO_PARENT")
 		context:AddRegistered("EXPAND_ALL")
 		context:AddRegistered("COLLAPSE_ALL")
@@ -2038,6 +2117,19 @@ local function main()
 			else
 				Explorer.HighlightObject(node.Obj)
 			end
+		end})
+		context:Register("UNHIGHLIGHT_OBJECT",{Name = "Remove World Highlight", OnClick = function()
+			Explorer.ClearWorldHighlight()
+		end})
+		context:Register("PATH_PREVIEW",{Name = "Show Path Preview", OnClick = function()
+			local node = selection.List[1]
+			if node and node.Obj then
+				Explorer.HighlightObject(node.Obj)
+				Explorer.ShowPathPreview(node.Obj)
+			end
+		end})
+		context:Register("STOP_PATH_PREVIEW",{Name = "Stop Path Preview", OnClick = function()
+			Explorer.StopPathPreview()
 		end})
 
 		context:Register("JUMP_TO_PARENT",{Name = "Jump to Parent", IconMap = Explorer.MiscIcons, Icon = "JumpToParent", OnClick = function()
@@ -14029,6 +14121,13 @@ local function main()
 		partSelectionBox.OnInput:Connect(function()
 			Settings.Explorer.PartSelectionBox = partSelectionBox.Toggled
 		end)
+
+		local highlightMode = AddDropdown("Highlight Color", {"Theme", "Cyan", "Red", "Gold", "Green"}, Settings.Explorer.HighlightMode or "Theme", false, 85)
+		highlightMode.OnSelect:Connect(function()
+			Settings.Explorer.HighlightMode = highlightMode.Selected
+			Main.SaveCurrentSettings()
+			if Explorer.ClearWorldHighlight then Explorer.ClearWorldHighlight() end
+		end)
 		
 		local copypathUseChildren = AddCheckbox("Use GetChildren to Copy Path", Settings.Explorer.CopyPathUseGetChildren)
 		copypathUseChildren.OnInput:Connect(function()
@@ -14189,7 +14288,8 @@ DefaultSettings = (function()
 			AutoUpdateMode = 0, -- 0 Default, 1 no tree update, 2 no descendant events, 3 frozen
 			PartSelectionBox = true,
 			GuiSelectionBox = true,
-			CopyPathUseGetChildren = true
+			CopyPathUseGetChildren = true,
+			HighlightMode = "Theme"
 		},
 		Properties = {
 			_Recurse = true,
