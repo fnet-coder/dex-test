@@ -14171,6 +14171,12 @@ local function main()
 		bgTransparency.FocusLost:Connect(function()
 			Settings.Window.Transparency = tonumber(bgTransparency.Text)
 		end)
+		local modernUI = AddCheckbox("Use Modern UI", Settings.Window.ModernUI)
+		modernUI.OnInput:Connect(function()
+			Settings.Window.ModernUI = modernUI.Toggled
+			Main.SaveCurrentSettings()
+			SettingsWindow.ReloadPrompt()
+		end)
 		
 		local classIcon = AddDropdown("Class Icons", {"Old", "NewDark", "Vanilla3"}, Settings.ClassIcon, false, 100)
 		classIcon.OnSelect:Connect(function()
@@ -14429,7 +14435,8 @@ DefaultSettings = (function()
 		},
 		Window = {
 			TitleOnMiddle = false,
-			Transparency = .2
+			Transparency = .2,
+			ModernUI = false
 		},
 		Decompiler = {
 			DecompilerFallback = "Konstant", --Konstant, Shiny, AdvancedDecompiler
@@ -15744,6 +15751,84 @@ Main = (function()
 				end
 			end)
 		end
+	end
+
+	Main.CreateModernGui = function()
+		local theme = Settings.Theme
+		local gui = Instance.new("ScreenGui")
+		gui.Name = "ModernMenu"
+		gui.IgnoreGuiInset = true
+		gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+		local panel = Instance.new("Frame")
+		panel.Name = "Panel"
+		panel.AnchorPoint = Vector2.new(0.5,0)
+		panel.Position = UDim2.new(0.5,0,0,12)
+		panel.Size = UDim2.new(0,430,0,74)
+		panel.BackgroundColor3 = theme.Main1
+		panel.BorderColor3 = theme.Outline2
+		panel.BorderSizePixel = 1
+		panel.Active = true
+		panel.Parent = gui
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0,8)
+		corner.Parent = panel
+		local title = Instance.new("TextLabel")
+		title.BackgroundTransparency = 1
+		title.Position = UDim2.new(0,14,0,7)
+		title.Size = UDim2.new(0,110,0,22)
+		title.Font = Enum.Font.GothamBold
+		title.Text = Main.GetProductName()
+		title.TextColor3 = theme.Text
+		title.TextSize = 17
+		title.TextXAlignment = Enum.TextXAlignment.Left
+		title.Parent = panel
+		local subtitle = Instance.new("TextLabel")
+		subtitle.BackgroundTransparency = 1
+		subtitle.Position = UDim2.new(0,14,0,31)
+		subtitle.Size = UDim2.new(0,110,0,18)
+		subtitle.Font = Enum.Font.Gotham
+		subtitle.Text = "MODERN CONTROL"
+		subtitle.TextColor3 = theme.PlaceholderText
+		subtitle.TextSize = 10
+		subtitle.TextXAlignment = Enum.TextXAlignment.Left
+		subtitle.Parent = panel
+		local actions = Instance.new("Frame")
+		actions.BackgroundTransparency = 1
+		actions.Position = UDim2.new(0,130,0,9)
+		actions.Size = UDim2.new(1,-140,1,-18)
+		actions.Parent = panel
+		local layout = Instance.new("UIGridLayout")
+		layout.CellPadding = UDim2.new(0,6,0,6)
+		layout.CellSize = UDim2.new(0,84,0,25)
+		layout.Parent = actions
+		local function addAction(text,callback)
+			local button = Instance.new("TextButton")
+			button.AutoButtonColor = false
+			button.BackgroundColor3 = theme.Button
+			button.BorderSizePixel = 0
+			button.Font = Enum.Font.GothamMedium
+			button.Text = text
+			button.TextColor3 = theme.Text
+			button.TextSize = 12
+			button.Parent = actions
+			local buttonCorner = Instance.new("UICorner")
+			buttonCorner.CornerRadius = UDim.new(0,5)
+			buttonCorner.Parent = button
+			button.MouseEnter:Connect(function() button.BackgroundColor3 = theme.ButtonHover end)
+			button.MouseLeave:Connect(function() button.BackgroundColor3 = theme.Button end)
+			button.MouseButton1Click:Connect(callback)
+		end
+		addAction("Explorer",function() Explorer.Window:Show() end)
+		addAction("Properties",function() Properties.Window:Show() end)
+		addAction("Console",function() Console.Window:Show() end)
+		addAction("Replay",function() if Replay and Replay.Window then Replay.Window:Show() end end)
+		addAction("Freecam",function() if Freecam then Freecam.Toggle() end end)
+		addAction("Settings",function() SettingsWindow.Window:Show() end)
+		addAction("Hide",function() panel.Visible = false end)
+		addAction("Close",function() gui:Destroy() end)
+		Main.SecureGui(gui)
+		Main.ModernGui = gui
+		return gui
 	end
 
 	Main.InitFreecam = function()
@@ -17128,7 +17213,11 @@ Main = (function()
 		if not replayLoaded then
 			warn("Replay Studio disabled: "..tostring(replayError))
 		end
-		Main.CreateMainGui()
+		if Settings.Window.ModernUI then
+			Main.CreateModernGui()
+		else
+			Main.CreateMainGui()
+		end
 		Explorer.Window:Show({Align = "right", Pos = 1, Size = 0.5, Silent = true})
 		Properties.Window:Show({Align = "right", Pos = 2, Size = 0.5, Silent = true})
 		
