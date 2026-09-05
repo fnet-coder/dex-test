@@ -900,6 +900,7 @@ local function main()
 	local remote_blocklist = {} -- list of remotes beng blocked, k = the remote instance, v = their old function :3
 	local activeWorldHighlight
 	local activeWorldHighlights = {}
+	local activeWorldBoxes = {}
 	local activeWorldObject
 	local pathPreviewFolder
 	local pathPreviewRunning = false
@@ -946,6 +947,15 @@ local function main()
 			highlight.Parent = workspace
 			activeWorldHighlights[#activeWorldHighlights+1] = highlight
 			activeWorldHighlight = highlight
+			local box = Instance.new("SelectionBox")
+			box.Name = "DexExplorerHighlightBox"
+			box.Adornee = target
+			box.LineThickness = 0.05
+			box.Color3 = Color3.fromRGB(255,45,45)
+			box.SurfaceColor3 = Color3.fromRGB(255,45,45)
+			box.SurfaceTransparency = 1
+			box.Parent = workspace
+			activeWorldBoxes[#activeWorldBoxes+1] = box
 		end
 		activeWorldObject = obj
 		return true
@@ -953,7 +963,9 @@ local function main()
 
 	Explorer.ClearWorldHighlight = function()
 		for _,highlight in ipairs(activeWorldHighlights) do highlight:Destroy() end
+		for _,box in ipairs(activeWorldBoxes) do box:Destroy() end
 		table.clear(activeWorldHighlights)
+		table.clear(activeWorldBoxes)
 		activeWorldHighlight = nil
 		activeWorldObject = nil
 		return true
@@ -974,6 +986,9 @@ local function main()
 		if not target or not target:IsDescendantOf(game) then return false end
 		local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
 		local targetPart = target:IsA("BasePart") and target or (target:IsA("Model") and (target.PrimaryPart or target:FindFirstChild("HumanoidRootPart",true)))
+		if not targetPart then
+			targetPart = target:FindFirstChildWhichIsA("BasePart",true)
+		end
 		if not root or not targetPart then return false end
 		pathPreviewFolder = Instance.new("Folder")
 		pathPreviewFolder.Name = "DexPathPreview"
@@ -14445,6 +14460,7 @@ end
 Main = (function()
 	local Main = {}
 	local Replay = {}
+	local Freecam = {}
 
 	Main.ModuleList = {"Explorer","Properties","ScriptViewer","Console","SaveInstance","ModelViewer","SettingsWindow"}
 	Main.Elevated = false
@@ -15703,6 +15719,73 @@ Main = (function()
 		end
 	end
 
+	Main.InitFreecam = function()
+		local inputService = service.UserInputService
+		local runService = service.RunService
+		local state = {Active = false, Connection = nil, InputBegan = nil, InputEnded = nil, Position = nil, Yaw = 0, Pitch = 0, CameraType = nil, CameraSubject = nil, MouseBehavior = nil, Keys = {}}
+		local keyMap = {
+			[Enum.KeyCode.W] = Vector3.new(0,0,-1), [Enum.KeyCode.S] = Vector3.new(0,0,1),
+			[Enum.KeyCode.A] = Vector3.new(-1,0,0), [Enum.KeyCode.D] = Vector3.new(1,0,0),
+			[Enum.KeyCode.Q] = Vector3.new(0,-1,0), [Enum.KeyCode.E] = Vector3.new(0,1,0)
+		}
+
+		local function stop()
+			if not state.Active then return false end
+			if state.Connection then state.Connection:Disconnect() end
+			if state.InputBegan then state.InputBegan:Disconnect() end
+			if state.InputEnded then state.InputEnded:Disconnect() end
+			local camera = workspace.CurrentCamera
+			camera.CameraType = state.CameraType or Enum.CameraType.Custom
+			if state.CameraSubject then camera.CameraSubject = state.CameraSubject end
+			inputService.MouseBehavior = state.MouseBehavior or Enum.MouseBehavior.Default
+			state.Active = false
+			state.Connection, state.InputBegan, state.InputEnded = nil,nil,nil
+			table.clear(state.Keys)
+			return true
+		end
+
+		local function start()
+			if state.Active then return false end
+			local camera = workspace.CurrentCamera
+			if not camera then return false end
+			state.Active = true
+			state.CameraType = camera.CameraType
+			state.CameraSubject = camera.CameraSubject
+			state.MouseBehavior = inputService.MouseBehavior
+			state.Position = camera.CFrame.Position
+			local look = camera.CFrame.LookVector
+			state.Yaw = math.atan2(-look.X,-look.Z)
+			state.Pitch = math.asin(math.clamp(look.Y,-1,1))
+			camera.CameraType = Enum.CameraType.Scriptable
+			inputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+			state.InputBegan = inputService.InputBegan:Connect(function(input,processed)
+				if processed then return end
+				state.Keys[input.KeyCode] = true
+				if input.KeyCode == Enum.KeyCode.Escape then stop() end
+			end)
+			state.InputEnded = inputService.InputEnded:Connect(function(input) state.Keys[input.KeyCode] = nil end)
+			state.Connection = runService.RenderStepped:Connect(function(dt)
+				if not state.Active then return end
+				local delta = inputService:GetMouseDelta()
+				state.Yaw = state.Yaw - delta.X * 0.0025
+				state.Pitch = math.clamp(state.Pitch - delta.Y * 0.0025,-1.5,1.5)
+				local rotation = CFrame.fromOrientation(state.Pitch,state.Yaw,0)
+				local movement = Vector3.zero
+				for key,direction in pairs(keyMap) do if state.Keys[key] then movement = movement + direction end end
+				local speed = state.Keys[Enum.KeyCode.LeftShift] and 96 or 32
+				state.Position = state.Position + rotation:VectorToWorldSpace(movement) * speed * dt
+				camera.CFrame = CFrame.new(state.Position) * rotation
+			end)
+			return true
+		end
+
+		Freecam.Start = start
+		Freecam.Stop = stop
+		Freecam.Toggle = function() if state.Active then return stop() else return start() end end
+		Freecam.IsActive = function() return state.Active end
+		Main.Freecam = Freecam
+	end
+
 	Main.InitReplay = function()
 		local runService = service.RunService
 		local httpService = service.HttpService
@@ -16082,6 +16165,11 @@ Main = (function()
 
 		if Replay and Replay.Window then
 			Main.CreateApp({Name = "Replay Studio", IconMap = Main.LargeIcons, Icon = "ScriptEdit", Window = Replay.Window})
+
+			Main.CreateApp({Name = "Freecam", IconMap = Main.LargeIcons, Icon = "Object", OnClick = function(enabled)
+				if not Freecam then return end
+				if enabled then Freecam.Start() else Freecam.Stop() end
+			end})
 		end
 
 		--Main.CreateApp({Name = "Secret Service Panel", IconMap = Main.LargeIcons, Icon = "Output", Window = SecretServicePanel.Window})
@@ -16120,7 +16208,7 @@ Main = (function()
 		"GetAttributeSnapshot", "CopyAttributeSnapshot", "GetPropertySnapshot", "CopyPropertySnapshot",
 		"GetTreeSnapshot", "CopyTreeSnapshot", "GetClassMetadata", "GetSelectionHealth",
 		"StartReplayRecording", "StopReplayRecording", "PlayReplay", "StopReplay", "OpenReplayStudio",
-		"ClearReplay", "SaveReplay", "LoadReplay", "GetReplayStatus"
+		"ClearReplay", "SaveReplay", "LoadReplay", "GetReplayStatus", "ToggleFreecam", "StopFreecam", "IsFreecamActive"
 	}
 
 	local function selectedNodes()
@@ -16703,6 +16791,119 @@ Main = (function()
 		if not Replay then return nil end
 		return {Recording = Replay.Recording, Playing = Replay.Playing, Frames = #Replay.Frames, Duration = Replay.Elapsed}
 	end
+	Main.Features.ToggleFreecam = function()
+		if not Freecam then return false end
+		return Freecam.Toggle()
+	end
+	Main.Features.StopFreecam = function()
+		if not Freecam then return false end
+		return Freecam.Stop()
+	end
+	Main.Features.IsFreecamActive = function()
+		return Freecam and Freecam.IsActive() or false
+	end
+
+	local function copyFeatureText(text)
+		if not env.setclipboard then return false end
+		env.setclipboard(tostring(text or ""))
+		return true
+	end
+	local function objectPosition(obj)
+		if obj:IsA("BasePart") then return obj.Position end
+		if obj:IsA("Model") then return obj:GetPivot().Position end
+		local part = obj:FindFirstChildWhichIsA("BasePart",true)
+		return part and part.Position
+	end
+	local function selectObjectPredicate(predicate)
+		return selectMatching(function(obj) return obj and predicate(obj) end)
+	end
+
+	local extraFeatures = {
+		GetPrimaryClass = function() local obj = selectedObjects()[1] return obj and obj.ClassName end,
+		GetPrimaryName = function() local obj = selectedObjects()[1] return obj and obj.Name end,
+		GetPrimaryParent = function() local obj = selectedObjects()[1] return obj and obj.Parent end,
+		GetPrimaryChildrenNames = function() local obj = selectedObjects()[1] local result = {} if obj then for _,child in ipairs(obj:GetChildren()) do result[#result+1] = child.Name end end return result end,
+		GetPrimaryAttributeNames = function() local obj = selectedObjects()[1] local result = {} if obj then for name in pairs(obj:GetAttributes()) do result[#result+1] = name end table.sort(result) end return result end,
+		GetSelectedCountByClass = function(className) local count = 0 for _,obj in ipairs(selectedObjects()) do if not className or obj:IsA(className) then count = count + 1 end end return count end,
+		GetSelectedPathsAndClasses = function() local result = {} for _,obj in ipairs(selectedObjects()) do result[#result+1] = Explorer.GetInstancePath(obj).." ["..obj.ClassName.."]" end return result end,
+		CopyPathsAndClasses = function() return copyFeatureText(table.concat(Main.Features.GetSelectedPathsAndClasses(),"\n")) end,
+		GetSelectedPositions = function() local result = {} for _,obj in ipairs(selectedObjects()) do local position = objectPosition(obj) if position then result[#result+1] = {Name = obj.Name, Position = position} end end return result end,
+		GetSelectionBounds = function() local minValue,maxValue local result = Main.Features.GetSelectedPositions() for _,entry in ipairs(result) do local p = entry.Position minValue = minValue and Vector3.new(math.min(minValue.X,p.X),math.min(minValue.Y,p.Y),math.min(minValue.Z,p.Z)) or p maxValue = maxValue and Vector3.new(math.max(maxValue.X,p.X),math.max(maxValue.Y,p.Y),math.max(maxValue.Z,p.Z)) or p end return minValue,maxValue end,
+		GetSelectionCenter = function() local minValue,maxValue = Main.Features.GetSelectionBounds() return minValue and (minValue+maxValue)/2 end,
+		GetSelectionDistance = function() local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") local result = {} if not root then return result end for _,obj in ipairs(selectedObjects()) do local p = objectPosition(obj) if p then result[#result+1] = {Name = obj.Name, Distance = (root.Position-p).Magnitude} end end return result end,
+		GetNearestSelected = function() local result = Main.Features.GetSelectionDistance() table.sort(result,function(a,b) return a.Distance < b.Distance end) return result[1] end,
+		GetFarthestSelected = function() local result = Main.Features.GetSelectionDistance() table.sort(result,function(a,b) return a.Distance > b.Distance end) return result[1] end,
+		SelectWithChildren = function() return selectObjectPredicate(function(obj) return #obj:GetChildren() > 0 end) end,
+		SelectWithoutChildren = function() return selectObjectPredicate(function(obj) return #obj:GetChildren() == 0 end) end,
+		SelectLeaves = function() return selectObjectPredicate(function(obj) return #obj:GetChildren() == 0 end) end,
+		SelectModels = function() return selectObjectPredicate(function(obj) return obj:IsA("Model") end) end,
+		SelectBaseParts = function() return selectObjectPredicate(function(obj) return obj:IsA("BasePart") end) end,
+		SelectGuiObjects = function() return selectObjectPredicate(function(obj) return obj:IsA("GuiObject") end) end,
+		SelectHumanoids = function() return selectObjectPredicate(function(obj) return obj:IsA("Humanoid") end) end,
+		SelectAttachments = function() return selectObjectPredicate(function(obj) return obj:IsA("Attachment") end) end,
+		SelectFolders = function() return selectObjectPredicate(function(obj) return obj:IsA("Folder") end) end,
+		SelectServices = function() return Main.Features.FindServices() end,
+		SelectRemoteObjects = function() return selectObjectPredicate(function(obj) return obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") or obj:IsA("UnreliableRemoteEvent") end) end,
+		SelectValueObjects = function() return selectObjectPredicate(function(obj) return obj:IsA("ValueBase") end) end,
+		FindExact = function(query) return Main.Features.SelectByName(query,true) end,
+		FindPrefix = function(query) return selectObjectPredicate(function(obj) return type(query) == "string" and string.sub(string.lower(obj.Name),1,#query) == string.lower(query) end) end,
+		FindSuffix = function(query) return selectObjectPredicate(function(obj) return type(query) == "string" and string.sub(string.lower(obj.Name),-#query) == string.lower(query) end) end,
+		FindContains = function(query) return Main.Features.FindInstances(query) end,
+		FindByClassExact = function(className) return Main.Features.SelectByClass(className) end,
+		FindUnderSelection = function(name) local result = {} for _,obj in ipairs(selectedObjects()) do for _,child in ipairs(obj:GetDescendants()) do if not name or string.find(string.lower(child.Name),string.lower(name),1,true) then result[#result+1] = nodes[child] end end end Explorer.Selection:SetTable(result) return #result end,
+		FindDescendantsByName = function(name) return Main.Features.FindUnderSelection(name) end,
+		FindPlayers = function(query) return Main.Features.FindInstances(query,"Player") end,
+		FindNPCs = function(query) return selectObjectPredicate(function(obj) return obj:IsA("Model") and obj:FindFirstChildOfClass("Humanoid") and not game:GetService("Players"):GetPlayerFromCharacter(obj) and (not query or string.find(string.lower(obj.Name),string.lower(query),1,true)) end) end,
+		FindInteractives = function() return selectObjectPredicate(function(obj) return obj:IsA("ClickDetector") or obj:IsA("ProximityPrompt") or obj:IsA("TouchTransmitter") end) end,
+		FindAnimations = function(query) return Main.Features.FindInstances(query,"Animation") end,
+		FindTools = function(query) return Main.Features.FindInstances(query,"Tool") end,
+		FindConstraints = function() return selectObjectPredicate(function(obj) return obj:IsA("Constraint") end) end,
+		FindLights = function() return selectObjectPredicate(function(obj) return obj:IsA("Light") end) end,
+		FindCameras = function() return selectObjectPredicate(function(obj) return obj:IsA("Camera") end) end,
+		FindParticles = function() return selectObjectPredicate(function(obj) return obj:IsA("ParticleEmitter") end) end,
+		FindTextures = function() return selectObjectPredicate(function(obj) return obj:IsA("Texture") or obj:IsA("Decal") end) end,
+		FindSoundsById = function(assetId) return selectObjectPredicate(function(obj) return obj:IsA("Sound") and (not assetId or string.find(obj.SoundId,tostring(assetId),1,true)) end) end,
+		FindAttributes = function(attributeName) return selectObjectPredicate(function(obj) return attributeName and obj:GetAttribute(attributeName) ~= nil end) end,
+		GetObjectSummary = function() return Main.Features.InspectSelection() end,
+		GetAttributeCount = function() local count = 0 for _,obj in ipairs(selectedObjects()) do for _ in pairs(obj:GetAttributes()) do count = count + 1 end end return count end,
+		GetPropertyCount = function() local count = 0 for _,obj in ipairs(selectedObjects()) do local class = API.Classes[obj.ClassName] while class do count = count + #(class.Properties or {}) class = class.Superclass end end return count end,
+		GetHierarchyDepth = function() local obj = selectedObjects()[1] local count = 0 while obj and obj.Parent do count = count + 1 obj = obj.Parent end return count end,
+		GetSiblingCount = function() local obj = selectedObjects()[1] return obj and obj.Parent and #obj.Parent:GetChildren() or 0 end,
+		GetPathDepth = function() local path = Main.Features.GetPrimaryPath() return path and #string.split(path,".") or 0 end,
+		GetSelectionNamesCsv = function() return table.concat(Main.Features.GetSelectedNames(),", ") end,
+		GetSelectionPathsCsv = function() return table.concat(Main.Features.GetSelectionPaths(),", ") end,
+		GetSelectionJson = function() local ok,result = pcall(service.HttpService.JSONEncode,service.HttpService,Main.Features.GetSelectedFullNames()) return ok and result or nil end,
+		CopySelectionNamesCsv = function() return copyFeatureText(Main.Features.GetSelectionNamesCsv()) end,
+		CopySelectionPathsCsv = function() return copyFeatureText(Main.Features.GetSelectionPathsCsv()) end,
+		CopySelectionJson = function() return copyFeatureText(Main.Features.GetSelectionJson()) end,
+		CopyTreeDepth1 = function() return copyFeatureText(Main.Features.GetTreeSnapshot(1)) end,
+		CopyTreeDepth3 = function() return copyFeatureText(Main.Features.GetTreeSnapshot(3)) end,
+		CopyTreeDepth5 = function() return copyFeatureText(Main.Features.GetTreeSnapshot(5)) end,
+		CopyAncestryPaths = function() return copyFeatureText(Main.Features.GetAncestrySnapshot()) end,
+		ToggleSaveInstance = function() if SaveInstance.Window:IsVisible() then SaveInstance.Window:Hide() else SaveInstance.Window:Show() end return true end,
+		ToggleScriptViewer = function() if ScriptViewer.Window:IsVisible() then ScriptViewer.Window:Hide() else ScriptViewer.Window:Show() end return true end,
+		Toggle3DViewer = function() return Main.Features.ToggleModelViewer() end,
+		ToggleSettings = function() if SettingsWindow.Window:IsVisible() then SettingsWindow.Window:Hide() else SettingsWindow.Window:Show() end return true end,
+		HideReplayStudio = function() if Replay and Replay.Window then Replay.Window:Hide() return true end return false end,
+		SetHighlightTheme = function() Settings.Explorer.HighlightMode = "Theme" Main.SaveCurrentSettings() return true end,
+		SetHighlightCyan = function() Settings.Explorer.HighlightMode = "Cyan" Main.SaveCurrentSettings() return true end,
+		SetHighlightRed = function() Settings.Explorer.HighlightMode = "Red" Main.SaveCurrentSettings() return true end,
+		SetHighlightGold = function() Settings.Explorer.HighlightMode = "Gold" Main.SaveCurrentSettings() return true end,
+		SetHighlightGreen = function() Settings.Explorer.HighlightMode = "Green" Main.SaveCurrentSettings() return true end,
+		ClearHighlights = function() return Explorer.ClearWorldHighlight() end,
+		ClearPathPreview = function() return Explorer.StopPathPreview() end,
+		RefreshAndFocus = function() Main.Features.RefreshExplorer() return Main.Features.FocusSelection() end,
+		SaveCurrentSettingsNow = function() Main.SaveCurrentSettings() return true end,
+		GetThemeColors = function() return Settings.Theme end,
+		GetExplorerState = function() return {Sorting = Settings.Explorer.Sorting, AutoUpdateMode = Settings.Explorer.AutoUpdateMode, Selected = #selectedNodes()} end,
+		GetAppNames = function() local result = {} for name in pairs(Main.MenuApps) do result[#result+1] = name end table.sort(result) return result end,
+		GetMissingCount = function() return #Main.MissingEnv end,
+		GetEnvironmentFlags = function() local result = {} for name,value in pairs(env) do result[name] = type(value) end return result end
+	}
+	for featureName,feature in pairs(extraFeatures) do
+		Main.Features[featureName] = feature
+		Main.FeatureOrder[#Main.FeatureOrder+1] = featureName
+	end
 	Main.RunFeature = function(name,...)
 		local feature = Main.Features[name]
 		if type(feature) ~= "function" then return false,"Unknown feature: "..tostring(name) end
@@ -16866,6 +17067,7 @@ Main = (function()
 
 		-- Init window system, create main menu, show explorer and properties
 		Lib.Window.Init()
+		Main.InitFreecam()
 		local replayLoaded,replayError = xpcall(Main.InitReplay,function(err)
 			return debug and debug.traceback and debug.traceback(tostring(err),2) or tostring(err)
 		end)
