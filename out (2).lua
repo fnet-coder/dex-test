@@ -14941,13 +14941,13 @@ Main = (function()
 				Syntax = {Background = Color3.fromRGB(40,28,11), Text = Color3.fromRGB(255,232,177), SelectionBack = Color3.fromRGB(161,104,18)}
 			},
 			Agent = {
-				Main1 = Color3.fromRGB(12,18,24), Main2 = Color3.fromRGB(7,12,17),
-				Outline1 = Color3.fromRGB(28,62,70), Outline2 = Color3.fromRGB(0,184,190),
-				Outline3 = Color3.fromRGB(5,24,29), TextBox = Color3.fromRGB(8,25,31),
-				Menu = Color3.fromRGB(6,20,26), ListSelection = Color3.fromRGB(0,126,135),
-				Button = Color3.fromRGB(14,55,62), ButtonHover = Color3.fromRGB(18,83,88),
-				ButtonPress = Color3.fromRGB(5,35,42), Highlight = Color3.fromRGB(0,214,190),
-				Text = Color3.fromRGB(218,255,248), PlaceholderText = Color3.fromRGB(92,157,158),
+				Main1 = Color3.fromRGB(3,5,7), Main2 = Color3.fromRGB(0,1,2),
+				Outline1 = Color3.fromRGB(16,34,39), Outline2 = Color3.fromRGB(0,160,166),
+				Outline3 = Color3.fromRGB(2,12,15), TextBox = Color3.fromRGB(3,14,17),
+				Menu = Color3.fromRGB(1,7,9), ListSelection = Color3.fromRGB(0,91,98),
+				Button = Color3.fromRGB(5,29,33), ButtonHover = Color3.fromRGB(8,55,60),
+				ButtonPress = Color3.fromRGB(2,18,21), Highlight = Color3.fromRGB(0,220,190),
+				Text = Color3.fromRGB(220,255,248), PlaceholderText = Color3.fromRGB(72,137,139),
 				Important = Color3.fromRGB(255,176,64),
 				Syntax = {Background = Color3.fromRGB(5,16,22), Text = Color3.fromRGB(188,238,230), SelectionBack = Color3.fromRGB(0,103,112)}
 			}
@@ -15269,6 +15269,21 @@ Main = (function()
             {20,"UIGradient",{Parent={19},Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1,0),NumberSequenceKeypoint.new(1,1,0),}),}},
 		})
 		gui.Main.Holder.Title.Text = Main.GetProductName()
+		local theme = Settings.Theme
+		gui.Main.BackgroundColor3 = theme.Main1
+		gui.Main.Holder.BackgroundColor3 = theme.Main2
+		gui.Main.Holder.Title.TextColor3 = theme.Text
+		gui.Main.Holder.Desc.TextColor3 = theme.Text
+		gui.Main.Holder.StatusText.TextColor3 = theme.Text
+		gui.Main.Holder.ProgressBar.BackgroundColor3 = theme.Outline3
+		gui.Main.Holder.ProgressBar.Bar.BackgroundColor3 = theme.Highlight
+		gui.Main.Outlines.ImageColor3 = theme.Outline2
+		gui.Main.Creator.Position = UDim2.new(1,-110,1,-20)
+		gui.Main.Improved.Position = UDim2.new(1,-110,1,-35)
+		gui.Main.Version.Position = UDim2.new(1,-110,1,-50)
+		gui.Main.Creator.ZIndex = 3
+		gui.Main.Improved.ZIndex = 3
+		gui.Main.Version.ZIndex = 3
 		gui.Main.Improved.Visible = true
 		gui.Main.Improved.ZIndex = 3
 		gui.Main.Improved.TextTransparency = 0
@@ -15717,6 +15732,17 @@ Main = (function()
 			{20,"TextLabel",{BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=1,BorderSizePixel=0,Font=3,Name="AppName",Parent={18},Position=UDim2.new(0,2,0,38),Size=UDim2.new(1,-4,1,-40),Text="Explorer",TextColor3=Color3.new(1,1,1),TextSize=14,TextTransparency=0.10000000149012,TextTruncate=1,TextWrapped=true,TextYAlignment=0,}},
 			{21,"Frame",{BackgroundColor3=Color3.new(0,0.66666668653488,1),BorderSizePixel=0,Name="Highlight",Parent={18},Position=UDim2.new(0,0,1,-2),Size=UDim2.new(1,0,0,2),}},
 		})
+		local theme = Settings.Theme
+		gui.OpenButton.BackgroundColor3 = theme.Main1
+		gui.OpenButton.MainFrame.BackgroundColor3 = theme.Main2
+		gui.OpenButton.MainFrame.BottomFrame.BackgroundColor3 = theme.Main1
+		gui.OpenButton.MainFrame.BottomFrame.CoverFrame.BackgroundColor3 = theme.Main1
+		gui.OpenButton.MainFrame.BottomFrame.CoverFrame.Line.BackgroundColor3 = theme.Outline3
+		gui.OpenButton.MainFrame.AppsFrame.ScrollBarImageColor3 = theme.Outline2
+		gui.App.Main.BackgroundColor3 = theme.Button
+		gui.App.Main.AppName.TextColor3 = theme.Text
+		gui.App.Main.Highlight.BackgroundColor3 = theme.Highlight
+		gui.OpenButton.TextColor3 = theme.Text
 		Main.MainGui = gui
 		Main.AppsFrame = gui.OpenButton.MainFrame.AppsFrame
 		Main.AppsContainer = Main.AppsFrame.Container
