@@ -16719,6 +16719,11 @@ Main = (function()
 end)()
 
 -- Start
-Main.Init()
+local initOk,initError = xpcall(Main.Init,function(err)
+	return debug and debug.traceback and debug.traceback(tostring(err),2) or tostring(err)
+end)
+if not initOk then
+	warn("Dex startup failed:\n"..tostring(initError))
+end
 
 --for i,v in pairs(Main.MissingEnv) do print(i,v) end
