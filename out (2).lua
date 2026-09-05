@@ -16685,7 +16685,9 @@ Main = (function()
 
 		-- Init window system, create main menu, show explorer and properties
 		Lib.Window.Init()
-		local replayLoaded,replayError = pcall(Main.InitReplay)
+		local replayLoaded,replayError = xpcall(Main.InitReplay,function(err)
+			return debug and debug.traceback and debug.traceback(tostring(err),2) or tostring(err)
+		end)
 		if not replayLoaded then
 			warn("Replay Studio disabled: "..tostring(replayError))
 		end
