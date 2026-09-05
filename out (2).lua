@@ -15269,6 +15269,11 @@ Main = (function()
             {20,"UIGradient",{Parent={19},Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1,0),NumberSequenceKeypoint.new(1,1,0),}),}},
 		})
 		gui.Main.Holder.Title.Text = Main.GetProductName()
+		gui.Main.Improved.Visible = true
+		gui.Main.Improved.ZIndex = 3
+		gui.Main.Improved.TextTransparency = 0
+		gui.Main.Improved.Text = "Improved by <font color=\"rgb(61,143,220)\">bsod</font>"
+		gui.Main.Improved.RichText = true
 		Main.ShowGui(gui)
 		local backGradient = gui.Main.UIGradient
 		local outlinesGradient = gui.Main.Outlines.UIGradient
@@ -15348,7 +15353,6 @@ Main = (function()
 		end
 		rightTextTransparency(versionGradient)
 		rightTextTransparency(creatorGradient)
-		rightTextTransparency(improvedGradient)
 
 		fastwait(0.9)
 
