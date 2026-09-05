@@ -15279,6 +15279,8 @@ Main = (function()
 		local versionGradient = versionText.UIGradient
 		local creatorText = gui.Main.Creator
 		local creatorGradient = creatorText.UIGradient
+		local improvedText = gui.Main.Improved
+		local improvedGradient = improvedText.UIGradient
 		local statusText = gui.Main.Holder.StatusText
 		local progressBar = gui.Main.Holder.ProgressBar
 		local tweenS = service.TweenService
@@ -15346,6 +15348,7 @@ Main = (function()
 		end
 		rightTextTransparency(versionGradient)
 		rightTextTransparency(creatorGradient)
+		rightTextTransparency(improvedGradient)
 
 		fastwait(0.9)
 
@@ -15366,6 +15369,7 @@ Main = (function()
 			tweenS:Create(descText,progressTI,{TextTransparency = 1}):Play()
 			tweenS:Create(versionText,progressTI,{TextTransparency = 1}):Play()
 			tweenS:Create(creatorText,progressTI,{TextTransparency = 1}):Play()
+			tweenS:Create(improvedText,progressTI,{TextTransparency = 1}):Play()
 			tweenS:Create(statusText,progressTI,{TextTransparency = 1}):Play()
 			tweenS:Create(progressBar,progressTI,{BackgroundTransparency = 1}):Play()
 			tweenS:Create(progressBar.Bar,progressTI,{BackgroundTransparency = 1}):Play()
