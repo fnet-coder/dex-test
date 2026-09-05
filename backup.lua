@@ -2,7 +2,7 @@
 	Dex++
 	Version 3.0
 	
-	Developed by Chillz, improved by bsod.
+	Developed by Chillz
 	
 	Dex++ is a revival of Moon's Dex, made to fulfill Moon's Dex prophecy.
 ]]
