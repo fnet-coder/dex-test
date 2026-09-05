@@ -15782,6 +15782,81 @@ Main = (function()
 		end
 	end
 
+	RemoteLogger.Serialize = function(value,depth)
+		depth = depth or 0
+		local valueType = typeof(value)
+		if valueType == "string" or valueType == "number" or valueType == "boolean" or value == nil then return value end
+		if valueType == "Instance" then return "<Instance:"..value:GetFullName()..">" end
+		if valueType ~= "table" or depth >= 3 then return "<"..valueType..">" end
+		local result = {}
+		for key,item in pairs(value) do result[tostring(key)] = RemoteLogger.Serialize(item,depth + 1) end
+		return result
+	end
+	RemoteLogger.Record = function(kind,remote,args)
+		if not RemoteLogger.Enabled then return end
+		local entry = {Kind = kind, Name = remote and remote.Name or "Unknown", Path = remote and remote:GetFullName() or "Unknown", Time = os.clock(), Arguments = {}}
+		for index,value in ipairs(args) do entry.Arguments[index] = RemoteLogger.Serialize(value) end
+		table.insert(RemoteLogger.Log,1,entry)
+		while #RemoteLogger.Log > RemoteLogger.MaxEntries do table.remove(RemoteLogger.Log) end
+		if RemoteLogger.Status then RemoteLogger.Status.Text = string.format("%d calls captured",#RemoteLogger.Log) end
+	end
+	RemoteLogger.Fire = function(remote,...)
+		assert(typeof(remote) == "Instance" and remote:IsA("RemoteEvent"),"RemoteLogger.Fire expects a RemoteEvent")
+		local args = {...}
+		RemoteLogger.Record("FireServer",remote,args)
+		return remote:FireServer(...)
+	end
+	RemoteLogger.Invoke = function(remote,...)
+		assert(typeof(remote) == "Instance" and remote:IsA("RemoteFunction"),"RemoteLogger.Invoke expects a RemoteFunction")
+		local args = {...}
+		RemoteLogger.Record("InvokeServer",remote,args)
+		return remote:InvokeServer(...)
+	end
+	RemoteLogger.Clear = function() table.clear(RemoteLogger.Log) if RemoteLogger.Status then RemoteLogger.Status.Text = "0 calls captured" end return true end
+	RemoteLogger.GetLog = function() return RemoteLogger.Log end
+	RemoteLogger.Export = function()
+		local ok,result = pcall(service.HttpService.JSONEncode,service.HttpService,RemoteLogger.Log)
+		return ok and result or nil
+	end
+	RemoteLogger.Copy = function()
+		local data = RemoteLogger.Export()
+		if not data or not env.setclipboard then return false end
+		env.setclipboard(data)
+		return true
+	end
+	RemoteLogger.SetEnabled = function(value) RemoteLogger.Enabled = value == true return RemoteLogger.Enabled end
+	RemoteLogger.Init = function()
+		local window = Lib.Window.new()
+		window:SetTitle("Remote Logger - Explicit Calls Only")
+		window:Resize(330,100)
+		local status = Lib.Label.new()
+		status.Position = UDim2.new(0,8,0,8)
+		status.Size = UDim2.new(1,-16,0,22)
+		status.Text = "0 calls captured"
+		window:Add(status,"Status")
+		RemoteLogger.Status = status.Gui
+		local clear = Lib.Button.new()
+		clear.Text = "Clear Log"
+		clear.Position = UDim2.new(0,8,0,38)
+		clear.Size = UDim2.new(0,95,0,24)
+		clear.OnClick:Connect(RemoteLogger.Clear)
+		window:Add(clear)
+		local copy = Lib.Button.new()
+		copy.Text = "Copy JSON"
+		copy.Position = UDim2.new(0,110,0,38)
+		copy.Size = UDim2.new(0,95,0,24)
+		copy.OnClick:Connect(RemoteLogger.Copy)
+		window:Add(copy)
+		local toggle = Lib.Button.new()
+		toggle.Text = "Disable"
+		toggle.Position = UDim2.new(0,212,0,38)
+		toggle.Size = UDim2.new(0,95,0,24)
+		toggle.OnClick:Connect(function() RemoteLogger.SetEnabled(not RemoteLogger.Enabled) toggle.Text = RemoteLogger.Enabled and "Disable" or "Enable" end)
+		window:Add(toggle)
+		RemoteLogger.Window = window
+		Main.RemoteLogger = RemoteLogger
+	end
+
 	Main.InitFreecam = function()
 		local inputService = service.UserInputService
 		local runService = service.RunService
@@ -16256,6 +16331,9 @@ Main = (function()
 		Main.CreateApp({Name = "Notepad", IconMap = Main.LargeIcons, Icon = "Script_Viewer", Window = ScriptViewer.Window})
 		
 		Main.CreateApp({Name = "Console", IconMap = Main.LargeIcons, Icon = "Executor", Window = Console.Window})
+		if RemoteLogger and RemoteLogger.Window then
+			Main.CreateApp({Name = "Remote Logger", IconMap = Main.MiscIcons, Icon = "Output", Window = RemoteLogger.Window})
+		end
 		
 		Main.CreateApp({Name = "Save Instance", IconMap = Main.LargeIcons, Icon = "Book", Window = SaveInstance.Window})
 		
@@ -16902,6 +16980,11 @@ Main = (function()
 		if not Replay then return nil end
 		return {Recording = Replay.Recording, Playing = Replay.Playing, Frames = #Replay.Frames, Duration = Replay.Elapsed}
 	end
+	Main.Features.GetRemoteLog = function() return RemoteLogger.GetLog() end
+	Main.Features.ClearRemoteLog = function() return RemoteLogger.Clear() end
+	Main.Features.CopyRemoteLog = function() return RemoteLogger.Copy() end
+	Main.Features.ExportRemoteLog = function() return RemoteLogger.Export() end
+	Main.Features.SetRemoteLogging = function(value) return RemoteLogger.SetEnabled(value) end
 	Main.Features.ToggleFreecam = function()
 		if not Freecam then return false end
 		return Freecam.Toggle()
