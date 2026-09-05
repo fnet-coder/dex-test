@@ -901,6 +901,7 @@ local function main()
 	local activeWorldHighlight
 	local activeWorldHighlights = {}
 	local activeWorldBoxes = {}
+	local activeWorldAdornments = {}
 	local activeWorldObject
 	local pathPreviewFolder
 	local pathPreviewRunning = false
@@ -951,6 +952,25 @@ local function main()
 			highlight.OutlineTransparency = 0
 			activeWorldHighlights[#activeWorldHighlights+1] = highlight
 			activeWorldHighlight = highlight
+			local adornmentPart = target:IsA("BasePart") and target or target.PrimaryPart or target:FindFirstChildWhichIsA("BasePart",true)
+			if adornmentPart then
+				local adornment = Instance.new("BoxHandleAdornment")
+				adornment.Name = "PlayerHighlightFallback"
+				adornment.Adornee = adornmentPart
+				adornment.AlwaysOnTop = true
+				adornment.ZIndex = 10
+				adornment.Color3 = Color3.fromRGB(255,0,0)
+				adornment.Transparency = 0.82
+				if target:IsA("Model") then
+					local boundsCFrame,boundsSize = target:GetBoundingBox()
+					adornment.Size = boundsSize + Vector3.new(0.15,0.15,0.15)
+					adornment.CFrame = adornmentPart.CFrame:ToObjectSpace(boundsCFrame)
+				else
+					adornment.Size = target.Size + Vector3.new(0.15,0.15,0.15)
+				end
+				adornment.Parent = workspace
+				activeWorldAdornments[#activeWorldAdornments+1] = adornment
+			end
 		end
 		activeWorldObject = obj
 		return true
@@ -959,8 +979,10 @@ local function main()
 	Explorer.ClearWorldHighlight = function()
 		for _,highlight in ipairs(activeWorldHighlights) do highlight:Destroy() end
 		for _,box in ipairs(activeWorldBoxes) do box:Destroy() end
+		for _,adornment in ipairs(activeWorldAdornments) do adornment:Destroy() end
 		table.clear(activeWorldHighlights)
 		table.clear(activeWorldBoxes)
+		table.clear(activeWorldAdornments)
 		activeWorldHighlight = nil
 		activeWorldObject = nil
 		return true
