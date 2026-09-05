@@ -15257,7 +15257,7 @@ Main = (function()
             {8,"Frame",{BackgroundColor3=Color3.new(0.20392157137394,0.20392157137394,0.20392157137394),BorderSizePixel=0,Name="ProgressBar",Parent={3},Position=UDim2.new(0,110,0,145),Size=UDim2.new(0,0,0,4),}},
             {9,"Frame",{BackgroundColor3=Color3.new(0.2392156869173,0.56078433990479,0.86274510622025),BorderSizePixel=0,Name="Bar",Parent={8},Size=UDim2.new(0,0,1,0),}},
             {10,"ImageLabel",{BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=1,Image="rbxassetid://2764171053",ImageColor3=Color3.new(0.17647059261799,0.17647059261799,0.17647059261799),Parent={8},ScaleType=1,Size=UDim2.new(1,0,1,0),SliceCenter=Rect.new(2,2,254,254),}},
-            {11,"TextLabel",{BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=1,Font=3,Name="Creator",Parent={2},Position=UDim2.new(1,-110,1,-20),Size=UDim2.new(0,105,0,20),Text="Developed by Chillz.",TextColor3=Color3.new(1,1,1),TextSize=14,TextXAlignment=1,}},
+			{11,"TextLabel",{BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=1,Font=3,Name="Creator",Parent={2},Position=UDim2.new(1,-185,1,-20),Size=UDim2.new(0,180,0,20),Text="Developed by Chillz, improved by <font color=\"rgb(61,143,220)\">bsod</font>",TextColor3=Color3.new(1,1,1),TextSize=14,TextXAlignment=1,RichText=true,}},
             {12,"UIGradient",{Parent={11},Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1,0),NumberSequenceKeypoint.new(1,1,0),}),}},
             {13,"TextLabel",{BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=1,Font=3,Name="Version",Parent={2},Position=UDim2.new(1,-110,1,-35),Size=UDim2.new(0,105,0,20),Text=Main.Version,TextColor3=Color3.new(1,1,1),TextSize=14,TextXAlignment=1,}},
             {14,"UIGradient",{Parent={13},Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1,0),NumberSequenceKeypoint.new(1,1,0),}),}},
@@ -15265,8 +15265,6 @@ Main = (function()
             {16,"UIGradient",{Parent={15},Rotation=-30,Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1,0),NumberSequenceKeypoint.new(1,1,0),}),}},
             {17,"UIGradient",{Parent={2},Rotation=-30,Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1,0),NumberSequenceKeypoint.new(1,1,0),}),}},
             {18,"UIDragDetector", {Parent={2}}},
-            {19,"TextLabel",{BackgroundColor3=Color3.new(1,1,1),BackgroundTransparency=1,Font=3,Name="Improved",Parent={2},Position=UDim2.new(1,-110,1,-50),Size=UDim2.new(0,105,0,20),Text="Improved by <b><font color=\"rgb(61,143,220)\">bsod</font></b>",TextColor3=Color3.new(1,1,1),TextSize=14,TextXAlignment=1,RichText=true,}},
-            {20,"UIGradient",{Parent={19},Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1,0),NumberSequenceKeypoint.new(1,1,0),}),}},
 		})
 		gui.Main.Holder.Title.Text = Main.GetProductName()
 		local theme = Settings.Theme
@@ -15279,57 +15277,14 @@ Main = (function()
 		gui.Main.Holder.ProgressBar.Bar.BackgroundColor3 = theme.Highlight
 		gui.Main.Outlines.ImageColor3 = theme.Outline2
 		local creatorText = gui.Main.Creator
-		local improvedText = gui.Main.Improved
 		local versionText = gui.Main.Version
 		creatorText.Parent = gui.Main.Holder
-		improvedText.Parent = gui.Main.Holder
 		versionText.Parent = gui.Main.Holder
-		creatorText.Position = UDim2.new(1,-110,1,-20)
-		improvedText.Position = UDim2.new(1,-110,1,-35)
+		creatorText.Position = UDim2.new(1,-185,1,-20)
 		versionText.Position = UDim2.new(1,-110,1,-50)
 		creatorText.ZIndex = 3
-		improvedText.ZIndex = 3
 		versionText.ZIndex = 3
-		improvedText.Visible = true
-		improvedText.TextTransparency = 0
-		improvedText.Text = "Improved by <font color=\"rgb(61,143,220)\">bsod</font>"
-		improvedText.RichText = true
 		Main.ShowGui(gui)
-
-		local notification = Instance.new("ScreenGui")
-		notification.Name = "ImprovementNotification"
-		notification.IgnoreGuiInset = true
-		notification.ZIndexBehavior = Enum.ZIndexBehavior.Global
-		local notificationFrame = Instance.new("Frame")
-		notificationFrame.BackgroundColor3 = theme.Main1
-		notificationFrame.BorderColor3 = theme.Highlight
-		notificationFrame.BorderSizePixel = 1
-		notificationFrame.Position = UDim2.new(0.5,-170,0,12)
-		notificationFrame.Size = UDim2.new(0,340,0,34)
-		notificationFrame.ZIndex = 20
-		notificationFrame.Parent = notification
-		local notificationText = Instance.new("TextLabel")
-		notificationText.BackgroundTransparency = 1
-		notificationText.Size = UDim2.new(1,-12,1,0)
-		notificationText.Position = UDim2.new(0,6,0,0)
-		notificationText.Text = "This script was improved by <font color=\"rgb(61,143,220)\">bsod</font>"
-		notificationText.TextColor3 = theme.Text
-		notificationText.Font = Enum.Font.SourceSans
-		notificationText.TextSize = 16
-		notificationText.RichText = true
-		notificationText.TextXAlignment = Enum.TextXAlignment.Center
-		notificationText.ZIndex = 21
-		notificationText.Parent = notificationFrame
-		Main.SecureGui(notification)
-		task.delay(5,function()
-			if notification.Parent then
-				local fade = service.TweenService:Create(notificationFrame,TweenInfo.new(0.35),{BackgroundTransparency = 1})
-				local textFade = service.TweenService:Create(notificationText,TweenInfo.new(0.35),{TextTransparency = 1})
-				fade:Play()
-				textFade:Play()
-				textFade.Completed:Connect(function() if notification then notification:Destroy() end end)
-			end
-		end)
 		local backGradient = gui.Main.UIGradient
 		local outlinesGradient = gui.Main.Outlines.UIGradient
 		local holderGradient = gui.Main.Holder.UIGradient
@@ -15337,7 +15292,6 @@ Main = (function()
 		local descText = gui.Main.Holder.Desc
 		local versionGradient = versionText.UIGradient
 		local creatorGradient = creatorText.UIGradient
-		local improvedGradient = improvedText.UIGradient
 		local statusText = gui.Main.Holder.StatusText
 		local progressBar = gui.Main.Holder.ProgressBar
 		local tweenS = service.TweenService
@@ -15425,7 +15379,6 @@ Main = (function()
 			tweenS:Create(descText,progressTI,{TextTransparency = 1}):Play()
 			tweenS:Create(versionText,progressTI,{TextTransparency = 1}):Play()
 			tweenS:Create(creatorText,progressTI,{TextTransparency = 1}):Play()
-			tweenS:Create(improvedText,progressTI,{TextTransparency = 1}):Play()
 			tweenS:Create(statusText,progressTI,{TextTransparency = 1}):Play()
 			tweenS:Create(progressBar,progressTI,{BackgroundTransparency = 1}):Play()
 			tweenS:Create(progressBar.Bar,progressTI,{BackgroundTransparency = 1}):Play()
