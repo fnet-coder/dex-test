@@ -15584,6 +15584,7 @@ Main = (function()
 					local key = model:GetFullName()
 					actors[#actors+1] = {K = key, C = {x,y,z,r00,r01,r02,r10,r11,r12,r20,r21,r22}}
 					replay.ActorSources[key] = model
+				end
 			end
 			return actors
 		end
