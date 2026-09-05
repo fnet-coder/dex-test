@@ -15278,28 +15278,65 @@ Main = (function()
 		gui.Main.Holder.ProgressBar.BackgroundColor3 = theme.Outline3
 		gui.Main.Holder.ProgressBar.Bar.BackgroundColor3 = theme.Highlight
 		gui.Main.Outlines.ImageColor3 = theme.Outline2
-		gui.Main.Creator.Position = UDim2.new(1,-110,1,-20)
-		gui.Main.Improved.Position = UDim2.new(1,-110,1,-35)
-		gui.Main.Version.Position = UDim2.new(1,-110,1,-50)
-		gui.Main.Creator.ZIndex = 3
-		gui.Main.Improved.ZIndex = 3
-		gui.Main.Version.ZIndex = 3
-		gui.Main.Improved.Visible = true
-		gui.Main.Improved.ZIndex = 3
-		gui.Main.Improved.TextTransparency = 0
-		gui.Main.Improved.Text = "Improved by <font color=\"rgb(61,143,220)\">bsod</font>"
-		gui.Main.Improved.RichText = true
+		local creatorText = gui.Main.Creator
+		local improvedText = gui.Main.Improved
+		local versionText = gui.Main.Version
+		creatorText.Parent = gui.Main.Holder
+		improvedText.Parent = gui.Main.Holder
+		versionText.Parent = gui.Main.Holder
+		creatorText.Position = UDim2.new(1,-110,1,-20)
+		improvedText.Position = UDim2.new(1,-110,1,-35)
+		versionText.Position = UDim2.new(1,-110,1,-50)
+		creatorText.ZIndex = 3
+		improvedText.ZIndex = 3
+		versionText.ZIndex = 3
+		improvedText.Visible = true
+		improvedText.TextTransparency = 0
+		improvedText.Text = "Improved by <font color=\"rgb(61,143,220)\">bsod</font>"
+		improvedText.RichText = true
 		Main.ShowGui(gui)
+
+		local notification = Instance.new("ScreenGui")
+		notification.Name = "ImprovementNotification"
+		notification.IgnoreGuiInset = true
+		notification.ZIndexBehavior = Enum.ZIndexBehavior.Global
+		local notificationFrame = Instance.new("Frame")
+		notificationFrame.BackgroundColor3 = theme.Main1
+		notificationFrame.BorderColor3 = theme.Highlight
+		notificationFrame.BorderSizePixel = 1
+		notificationFrame.Position = UDim2.new(0.5,-170,0,12)
+		notificationFrame.Size = UDim2.new(0,340,0,34)
+		notificationFrame.ZIndex = 20
+		notificationFrame.Parent = notification
+		local notificationText = Instance.new("TextLabel")
+		notificationText.BackgroundTransparency = 1
+		notificationText.Size = UDim2.new(1,-12,1,0)
+		notificationText.Position = UDim2.new(0,6,0,0)
+		notificationText.Text = "This script was improved by <font color=\"rgb(61,143,220)\">bsod</font>"
+		notificationText.TextColor3 = theme.Text
+		notificationText.Font = Enum.Font.SourceSans
+		notificationText.TextSize = 16
+		notificationText.RichText = true
+		notificationText.TextXAlignment = Enum.TextXAlignment.Center
+		notificationText.ZIndex = 21
+		notificationText.Parent = notificationFrame
+		Main.SecureGui(notification)
+		task.delay(5,function()
+			if notification.Parent then
+				local fade = service.TweenService:Create(notificationFrame,TweenInfo.new(0.35),{BackgroundTransparency = 1})
+				local textFade = service.TweenService:Create(notificationText,TweenInfo.new(0.35),{TextTransparency = 1})
+				fade:Play()
+				textFade:Play()
+				textFade.Completed:Connect(function() if notification then notification:Destroy() end end)
+			end
+		end)
 		local backGradient = gui.Main.UIGradient
 		local outlinesGradient = gui.Main.Outlines.UIGradient
 		local holderGradient = gui.Main.Holder.UIGradient
 		local titleText = gui.Main.Holder.Title
 		local descText = gui.Main.Holder.Desc
-		local versionText = gui.Main.Version
 		local versionGradient = versionText.UIGradient
-		local creatorText = gui.Main.Creator
 		local creatorGradient = creatorText.UIGradient
-		local improvedText = gui.Main.Improved
 		local improvedGradient = improvedText.UIGradient
 		local statusText = gui.Main.Holder.StatusText
 		local progressBar = gui.Main.Holder.ProgressBar
