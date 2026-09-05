@@ -15899,7 +15899,9 @@ Main = (function()
 		
 		Main.CreateApp({Name = "3D Viewer", IconMap = Main.LargeIcons, Icon = "Object", Window = ModelViewer.Window})
 
-		Main.CreateApp({Name = "Replay Studio", IconMap = Main.LargeIcons, Icon = "ScriptEdit", Window = Replay.Window})
+		if Replay and Replay.Window then
+			Main.CreateApp({Name = "Replay Studio", IconMap = Main.LargeIcons, Icon = "ScriptEdit", Window = Replay.Window})
+		end
 
 		--Main.CreateApp({Name = "Secret Service Panel", IconMap = Main.LargeIcons, Icon = "Output", Window = SecretServicePanel.Window})
 		
@@ -16683,7 +16685,10 @@ Main = (function()
 
 		-- Init window system, create main menu, show explorer and properties
 		Lib.Window.Init()
-		Main.InitReplay()
+		local replayLoaded,replayError = pcall(Main.InitReplay)
+		if not replayLoaded then
+			warn("Replay Studio disabled: "..tostring(replayError))
+		end
 		Main.CreateMainGui()
 		Explorer.Window:Show({Align = "right", Pos = 1, Size = 0.5, Silent = true})
 		Properties.Window:Show({Align = "right", Pos = 2, Size = 0.5, Silent = true})
