@@ -898,7 +898,188 @@ local function main()
 
 	local iconData
 	local remote_blocklist = {} -- list of remotes beng blocked, k = the remote instance, v = their old function :3
+	local activeWorldHighlight
+	local activeWorldHighlights = {}
+	local activeWorldBoxes = {}
+	local activeWorldAdornments = {}
+	local activeWorldObject
+	local pathPreviewFolder
+	local pathPreviewRunning = false
 	nodes = nodes or {}
+
+	Explorer.HighlightObject = function(obj)
+		Explorer.ClearWorldHighlight()
+		if not obj or not obj:IsDescendantOf(game) then return false end
+		local targets = {}
+		if obj:IsA("Model") or obj:IsA("BasePart") then
+			targets[1] = obj
+		else
+			local ancestor = obj:FindFirstAncestorWhichIsA("Model") or obj:FindFirstAncestorWhichIsA("BasePart")
+			if ancestor then
+				targets[1] = ancestor
+			else
+				for _,descendant in ipairs(obj:GetDescendants()) do
+					if descendant:IsA("Model") and not descendant:FindFirstAncestorWhichIsA("Model") then
+						targets[#targets+1] = descendant
+					elseif descendant:IsA("BasePart") and not descendant:FindFirstAncestorWhichIsA("Model") then
+						targets[#targets+1] = descendant
+					end
+					if #targets >= 50 then break end
+				end
+			end
+		end
+		if #targets == 0 then return false end
+		local highlightColors = {
+			Cyan = Color3.fromRGB(0,170,255),
+			Red = Color3.fromRGB(255,70,70),
+			Gold = Color3.fromRGB(255,190,40),
+			Green = Color3.fromRGB(60,220,120)
+		}
+		local highlightColor = Settings.Explorer.HighlightMode == "Theme" and Settings.Theme.Highlight or highlightColors[Settings.Explorer.HighlightMode] or Settings.Theme.Highlight
+		for _,target in ipairs(targets) do
+			local highlight = Instance.new("Highlight")
+			highlight.Name = "PlayerHighlight"
+			if target:IsA("Model") then
+				highlight.Parent = target
+			else
+				highlight.Adornee = target
+				highlight.Parent = workspace
+			end
+			highlight.DepthMode = Settings.Explorer.HighlightThroughWalls and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
+			highlight.FillColor = Color3.fromRGB(255,0,0)
+			highlight.FillTransparency = 0.5
+			highlight.OutlineColor = Color3.fromRGB(255,255,255)
+			highlight.OutlineTransparency = 0
+			activeWorldHighlights[#activeWorldHighlights+1] = highlight
+			activeWorldHighlight = highlight
+			local adornmentPart = target:IsA("BasePart") and target or target.PrimaryPart or target:FindFirstChildWhichIsA("BasePart",true)
+			if adornmentPart then
+				local adornment = Instance.new("BoxHandleAdornment")
+				adornment.Name = "PlayerHighlightFallback"
+				adornment.Adornee = adornmentPart
+				adornment.AlwaysOnTop = true
+				adornment.ZIndex = 10
+				adornment.Color3 = Color3.fromRGB(255,0,0)
+				adornment.Transparency = 0.82
+				if target:IsA("Model") then
+					local boundsCFrame,boundsSize = target:GetBoundingBox()
+					adornment.Size = boundsSize + Vector3.new(0.15,0.15,0.15)
+					adornment.CFrame = adornmentPart.CFrame:ToObjectSpace(boundsCFrame)
+				else
+					adornment.Size = target.Size + Vector3.new(0.15,0.15,0.15)
+				end
+				adornment.Parent = workspace
+				activeWorldAdornments[#activeWorldAdornments+1] = adornment
+			end
+		end
+		activeWorldObject = obj
+		return true
+	end
+
+	Explorer.ClearWorldHighlight = function()
+		for _,highlight in ipairs(activeWorldHighlights) do highlight:Destroy() end
+		for _,box in ipairs(activeWorldBoxes) do box:Destroy() end
+		for _,adornment in ipairs(activeWorldAdornments) do adornment:Destroy() end
+		table.clear(activeWorldHighlights)
+		table.clear(activeWorldBoxes)
+		table.clear(activeWorldAdornments)
+		activeWorldHighlight = nil
+		activeWorldObject = nil
+		return true
+	end
+
+	local function clearPathPreviewVisuals()
+		if pathPreviewFolder then pathPreviewFolder:ClearAllChildren() end
+	end
+
+	Explorer.StopPathPreview = function()
+		pathPreviewRunning = false
+		if pathPreviewFolder then pathPreviewFolder:Destroy() pathPreviewFolder = nil end
+		return true
+	end
+
+	Explorer.ShowPathPreview = function(target)
+		Explorer.StopPathPreview()
+		if not target or not target:IsDescendantOf(game) then return false end
+		local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+		local targetPart = target:IsA("BasePart") and target or (target:IsA("Model") and (target.PrimaryPart or target:FindFirstChild("HumanoidRootPart",true)))
+		if not targetPart then
+			targetPart = target:FindFirstChildWhichIsA("BasePart",true)
+		end
+		if not root or not targetPart then return false end
+		pathPreviewFolder = Instance.new("Folder")
+		pathPreviewFolder.Name = "DexPathPreview"
+		pathPreviewFolder.Parent = workspace
+		pathPreviewRunning = true
+
+		local function drawPath()
+			if not pathPreviewRunning or not pathPreviewFolder.Parent then return end
+			local currentRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+			if not currentRoot or not targetPart.Parent then Explorer.StopPathPreview() return end
+			local pathOk,path = pcall(service.PathfindingService.CreatePath,service.PathfindingService,{AgentRadius = 2, AgentHeight = 5, AgentCanJump = true, WaypointSpacing = 3})
+			local ok = pathOk and pcall(path.ComputeAsync,path,currentRoot.Position,targetPart.Position)
+			clearPathPreviewVisuals()
+			local waypoints
+			if pathOk and ok and path.Status == Enum.PathStatus.Success then
+				waypoints = path:GetWaypoints()
+			else
+				waypoints = {{Position = currentRoot.Position},{Position = targetPart.Position}}
+			end
+			local rayParams = RaycastParams.new()
+			local filterOk = pcall(function() rayParams.FilterType = Enum.RaycastFilterType.Exclude end)
+			if not filterOk then rayParams.FilterType = Enum.RaycastFilterType.Blacklist end
+			rayParams.FilterDescendantsInstances = {plr.Character,pathPreviewFolder,targetPart.Parent}
+			for _,waypoint in ipairs(waypoints) do
+				local origin = waypoint.Position + Vector3.new(0,50,0)
+				local rayOk,hit = pcall(workspace.Raycast,workspace,origin,Vector3.new(0,-200,0),rayParams)
+				if not rayOk then hit = nil end
+				waypoint.Position = (hit and hit.Position or waypoint.Position) + Vector3.new(0,0.16,0)
+			end
+			for index = 1,#waypoints do
+				local point = Instance.new("Part")
+				point.Name = "Waypoint"
+				point.Shape = Enum.PartType.Ball
+				point.Size = Vector3.new(0.45,0.45,0.45)
+				point.Position = waypoints[index].Position + Vector3.new(0,0.18,0)
+				point.Anchored = true
+				point.CanCollide = false
+				point.Material = Enum.Material.Neon
+				point.Color = Settings.Theme.Highlight
+				point.Parent = pathPreviewFolder
+				if index < #waypoints then
+					local nextPosition = waypoints[index + 1].Position + Vector3.new(0,0.12,0)
+					local currentPosition = waypoints[index].Position + Vector3.new(0,0.12,0)
+					local distance = (nextPosition-currentPosition).Magnitude
+					local segment = Instance.new("Part")
+					segment.Name = "PathSegment"
+					segment.Size = Vector3.new(0.22,0.08,math.max(distance,0.5))
+					segment.CFrame = CFrame.lookAt((currentPosition+nextPosition)/2,nextPosition)
+					segment.Anchored = true
+					segment.CanCollide = false
+					segment.Material = Enum.Material.Neon
+					segment.Color = Settings.Theme.Highlight
+					segment.Parent = pathPreviewFolder
+					local arrow = Instance.new("WedgePart")
+					arrow.Name = "PathArrow"
+					arrow.Size = Vector3.new(0.8,0.12,math.max(distance,0.5))
+					arrow.CFrame = CFrame.lookAt((currentPosition+nextPosition)/2,nextPosition)
+					arrow.Anchored = true
+					arrow.CanCollide = false
+					arrow.Material = Enum.Material.Neon
+					arrow.Color = Settings.Theme.Highlight
+					arrow.Parent = pathPreviewFolder
+				end
+			end
+		end
+
+		task.spawn(function()
+			while pathPreviewRunning do
+				drawPath()
+				task.wait(math.clamp(tonumber(Settings.Explorer.PathRefreshInterval) or 5,1,60))
+			end
+		end)
+		return true
+	end
 
 	addObject = function(root)
 		if nodes[root] then return end
@@ -1743,6 +1924,10 @@ local function main()
 		context:AddRegistered("GROUP")
 		context:AddRegistered("UNGROUP")
 		context:AddRegistered("SELECT_CHILDREN")
+		context:AddRegistered("HIGHLIGHT_OBJECT")
+		context:AddRegistered("UNHIGHLIGHT_OBJECT")
+		context:AddRegistered("PATH_PREVIEW")
+		context:AddRegistered("STOP_PATH_PREVIEW")
 		context:AddRegistered("JUMP_TO_PARENT")
 		context:AddRegistered("EXPAND_ALL")
 		context:AddRegistered("COLLAPSE_ALL")
@@ -1997,6 +2182,29 @@ local function main()
 			else
 				Explorer.Refresh()
 			end
+		end})
+
+		context:Register("HIGHLIGHT_OBJECT",{Name = "Highlight in World", OnClick = function()
+			local node = selection.List[1]
+			if not node or not node.Obj then return end
+			if activeWorldObject == node.Obj then
+				Explorer.ClearWorldHighlight()
+			else
+				Explorer.HighlightObject(node.Obj)
+			end
+		end})
+		context:Register("UNHIGHLIGHT_OBJECT",{Name = "Remove World Highlight", OnClick = function()
+			Explorer.ClearWorldHighlight()
+		end})
+		context:Register("PATH_PREVIEW",{Name = "Show Path Preview", OnClick = function()
+			local node = selection.List[1]
+			if node and node.Obj then
+				Explorer.HighlightObject(node.Obj)
+				Explorer.ShowPathPreview(node.Obj)
+			end
+		end})
+		context:Register("STOP_PATH_PREVIEW",{Name = "Stop Path Preview", OnClick = function()
+			Explorer.StopPathPreview()
 		end})
 
 		context:Register("JUMP_TO_PARENT",{Name = "Jump to Parent", IconMap = Explorer.MiscIcons, Icon = "JumpToParent", OnClick = function()
@@ -13963,7 +14171,6 @@ local function main()
 		bgTransparency.FocusLost:Connect(function()
 			Settings.Window.Transparency = tonumber(bgTransparency.Text)
 		end)
-		
 		local classIcon = AddDropdown("Class Icons", {"Old", "NewDark", "Vanilla3"}, Settings.ClassIcon, false, 100)
 		classIcon.OnSelect:Connect(function()
 			Settings.ClassIcon = classIcon.Selected
@@ -13987,6 +14194,44 @@ local function main()
 		local partSelectionBox = AddCheckbox("Part Selection Box", Settings.Explorer.PartSelectionBox)
 		partSelectionBox.OnInput:Connect(function()
 			Settings.Explorer.PartSelectionBox = partSelectionBox.Toggled
+		end)
+
+		local highlightMode = AddDropdown("Highlight Color", {"Theme", "Cyan", "Red", "Gold", "Green"}, Settings.Explorer.HighlightMode or "Theme", false, 85)
+		highlightMode.OnSelect:Connect(function()
+			Settings.Explorer.HighlightMode = highlightMode.Selected
+			Main.SaveCurrentSettings()
+			if Explorer.ClearWorldHighlight then Explorer.ClearWorldHighlight() end
+		end)
+		local highlightThroughWalls = AddCheckbox("Highlight Through Walls", Settings.Explorer.HighlightThroughWalls)
+		highlightThroughWalls.OnInput:Connect(function()
+			Settings.Explorer.HighlightThroughWalls = highlightThroughWalls.Toggled
+			Main.SaveCurrentSettings()
+		end)
+		local pathRefresh = AddTextbox("Path Refresh Seconds", tostring(Settings.Explorer.PathRefreshInterval), 35)
+		pathRefresh.FocusLost:Connect(function()
+			local value = tonumber(pathRefresh.Text)
+			if value and value >= 1 and value <= 60 then Settings.Explorer.PathRefreshInterval = value else pathRefresh.Text = tostring(Settings.Explorer.PathRefreshInterval) end
+			Main.SaveCurrentSettings()
+		end)
+
+		AddSeperator("Controls")
+		local freecamSpeed = AddTextbox("Freecam Speed", tostring(Settings.Explorer.FreecamSpeed), 35)
+		freecamSpeed.FocusLost:Connect(function()
+			local value = tonumber(freecamSpeed.Text)
+			if value and value > 0 and value <= 500 then Settings.Explorer.FreecamSpeed = value else freecamSpeed.Text = tostring(Settings.Explorer.FreecamSpeed) end
+			Main.SaveCurrentSettings()
+		end)
+		local freecamSensitivity = AddTextbox("Freecam Sensitivity", tostring(Settings.Explorer.FreecamSensitivity), 45)
+		freecamSensitivity.FocusLost:Connect(function()
+			local value = tonumber(freecamSensitivity.Text)
+			if value and value > 0 and value <= 0.02 then Settings.Explorer.FreecamSensitivity = value else freecamSensitivity.Text = tostring(Settings.Explorer.FreecamSensitivity) end
+			Main.SaveCurrentSettings()
+		end)
+		local replayRate = AddTextbox("Replay Capture FPS", tostring(Settings.Explorer.ReplayCaptureRate), 35)
+		replayRate.FocusLost:Connect(function()
+			local value = tonumber(replayRate.Text)
+			if value and value >= 10 and value <= 60 then Settings.Explorer.ReplayCaptureRate = value else replayRate.Text = tostring(Settings.Explorer.ReplayCaptureRate) end
+			Main.SaveCurrentSettings()
 		end)
 		
 		local copypathUseChildren = AddCheckbox("Use GetChildren to Copy Path", Settings.Explorer.CopyPathUseGetChildren)
@@ -14148,7 +14393,13 @@ DefaultSettings = (function()
 			AutoUpdateMode = 0, -- 0 Default, 1 no tree update, 2 no descendant events, 3 frozen
 			PartSelectionBox = true,
 			GuiSelectionBox = true,
-			CopyPathUseGetChildren = true
+			CopyPathUseGetChildren = true,
+			HighlightMode = "Theme",
+			HighlightThroughWalls = true,
+			PathRefreshInterval = 5,
+			FreecamSpeed = 32,
+			FreecamSensitivity = 0.0025,
+			ReplayCaptureRate = 30
 		},
 		Properties = {
 			_Recurse = true,
@@ -14271,6 +14522,8 @@ end
 Main = (function()
 	local Main = {}
 	local Replay = {}
+	local Freecam = {}
+	local RemoteLogger = {Log = {}, Enabled = true, MaxEntries = 500, Window = nil, Status = nil}
 
 	Main.ModuleList = {"Explorer","Properties","ScriptViewer","Console","SaveInstance","ModelViewer","SettingsWindow"}
 	Main.Elevated = false
@@ -15529,6 +15782,107 @@ Main = (function()
 		end
 	end
 
+	Main.InitFreecam = function()
+		local inputService = service.UserInputService
+		local runService = service.RunService
+		local state = {Active = false, Connection = nil, InputBegan = nil, InputEnded = nil, InputChanged = nil, Position = nil, Yaw = 0, Pitch = 0, MouseDelta = Vector2.zero, CameraType = nil, CameraSubject = nil, MouseBehavior = nil, MouseIconEnabled = true, Keys = {}, Root = nil, RootAnchored = false, Humanoid = nil, WalkSpeed = nil, JumpPower = nil, JumpHeight = nil, AutoRotate = nil}
+		local keyMap = {
+			[Enum.KeyCode.W] = Vector3.new(0,0,-1), [Enum.KeyCode.S] = Vector3.new(0,0,1),
+			[Enum.KeyCode.A] = Vector3.new(-1,0,0), [Enum.KeyCode.D] = Vector3.new(1,0,0),
+			[Enum.KeyCode.Q] = Vector3.new(0,-1,0), [Enum.KeyCode.E] = Vector3.new(0,1,0)
+		}
+
+		local function stop()
+			if not state.Active then return false end
+			if state.Connection then state.Connection:Disconnect() end
+			if state.InputBegan then state.InputBegan:Disconnect() end
+			if state.InputEnded then state.InputEnded:Disconnect() end
+			if state.InputChanged then state.InputChanged:Disconnect() end
+			runService:UnbindFromRenderStep("DexFreecam")
+			local camera = workspace.CurrentCamera
+			camera.CameraType = state.CameraType or Enum.CameraType.Custom
+			if state.CameraSubject then camera.CameraSubject = state.CameraSubject end
+			if state.Root and state.Root.Parent then state.Root.Anchored = state.RootAnchored end
+			if state.Humanoid and state.Humanoid.Parent then
+				state.Humanoid.WalkSpeed = state.WalkSpeed
+				state.Humanoid.JumpPower = state.JumpPower
+				state.Humanoid.JumpHeight = state.JumpHeight
+				state.Humanoid.AutoRotate = state.AutoRotate
+			end
+			inputService.MouseBehavior = state.MouseBehavior or Enum.MouseBehavior.Default
+			inputService.MouseIconEnabled = state.MouseIconEnabled
+			state.Active = false
+			state.Connection, state.InputBegan, state.InputEnded, state.InputChanged = nil,nil,nil,nil
+			table.clear(state.Keys)
+			return true
+		end
+
+		local function start()
+			if state.Active then return false end
+			local camera = workspace.CurrentCamera
+			if not camera then return false end
+			state.Active = true
+			state.CameraType = camera.CameraType
+			state.CameraSubject = camera.CameraSubject
+			state.MouseBehavior = inputService.MouseBehavior
+			state.MouseIconEnabled = inputService.MouseIconEnabled
+			state.Position = camera.CFrame.Position
+			state.Root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+			state.Humanoid = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+			if state.Root then state.RootAnchored = state.Root.Anchored state.Root.Anchored = true end
+			if state.Humanoid then
+				state.WalkSpeed = state.Humanoid.WalkSpeed
+				state.JumpPower = state.Humanoid.JumpPower
+				state.JumpHeight = state.Humanoid.JumpHeight
+				state.AutoRotate = state.Humanoid.AutoRotate
+				state.Humanoid.WalkSpeed = 0
+				state.Humanoid.JumpPower = 0
+				state.Humanoid.JumpHeight = 0
+				state.Humanoid.AutoRotate = false
+				state.Humanoid:Move(Vector3.zero)
+			end
+			local look = camera.CFrame.LookVector
+			state.Yaw = math.atan2(-look.X,-look.Z)
+			state.Pitch = math.asin(math.clamp(look.Y,-1,1))
+			camera.CameraType = Enum.CameraType.Scriptable
+			inputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+			inputService.MouseIconEnabled = false
+			state.InputBegan = inputService.InputBegan:Connect(function(input,processed)
+				if processed then return end
+				state.Keys[input.KeyCode] = true
+				if input.KeyCode == Enum.KeyCode.Escape then stop() end
+			end)
+			state.InputEnded = inputService.InputEnded:Connect(function(input) state.Keys[input.KeyCode] = nil end)
+			state.InputChanged = inputService.InputChanged:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseMovement then state.MouseDelta = state.MouseDelta + Vector2.new(input.Delta.X,input.Delta.Y) end
+			end)
+			runService:BindToRenderStep("DexFreecam",Enum.RenderPriority.Camera.Value + 1,function(dt)
+				if not state.Active then return end
+				local delta = state.MouseDelta
+				local mouseOk,mouseDelta = pcall(inputService.GetMouseDelta,inputService)
+				if mouseOk and mouseDelta and mouseDelta.Magnitude > delta.Magnitude then delta = mouseDelta end
+				state.MouseDelta = Vector2.zero
+				local sensitivity = tonumber(Settings.Explorer.FreecamSensitivity) or 0.0025
+				state.Yaw = state.Yaw - delta.X * sensitivity
+				state.Pitch = math.clamp(state.Pitch - delta.Y * sensitivity,-1.5,1.5)
+				local rotation = CFrame.fromOrientation(state.Pitch,state.Yaw,0)
+				local movement = Vector3.zero
+				for key,direction in pairs(keyMap) do if state.Keys[key] then movement = movement + direction end end
+				local baseSpeed = tonumber(Settings.Explorer.FreecamSpeed) or 32
+				local speed = state.Keys[Enum.KeyCode.LeftShift] and baseSpeed * 3 or baseSpeed
+				state.Position = state.Position + rotation:VectorToWorldSpace(movement) * speed * dt
+				camera.CFrame = CFrame.new(state.Position) * rotation
+			end)
+			return true
+		end
+
+		Freecam.Start = start
+		Freecam.Stop = stop
+		Freecam.Toggle = function() if state.Active then return stop() else return start() end end
+		Freecam.IsActive = function() return state.Active end
+		Main.Freecam = Freecam
+	end
+
 	Main.InitReplay = function()
 		local runService = service.RunService
 		local httpService = service.HttpService
@@ -15626,7 +15980,8 @@ Main = (function()
 			replay.CaptureConnection = runService.RenderStepped:Connect(function(dt)
 				local captureOk,captureError = pcall(function()
 					replay.Elapsed = replay.Elapsed + dt
-					if replay.Elapsed - replay.LastCapture < 1/30 then return end
+					local captureRate = math.clamp(tonumber(Settings.Explorer.ReplayCaptureRate) or 30,10,60)
+					if replay.Elapsed - replay.LastCapture < 1/captureRate then return end
 					replay.LastCapture = replay.Elapsed
 					local camera = workspace.CurrentCamera
 					if not camera then return end
@@ -15908,6 +16263,24 @@ Main = (function()
 
 		if Replay and Replay.Window then
 			Main.CreateApp({Name = "Replay Studio", IconMap = Main.LargeIcons, Icon = "ScriptEdit", Window = Replay.Window})
+
+			Main.CreateApp({Name = "Freecam", IconMap = Main.LargeIcons, Icon = "Object", OnClick = function(enabled)
+				if not Freecam then return end
+				if enabled then Freecam.Start() else Freecam.Stop() end
+			end})
+
+			Main.CreateApp({Name = "Clear Highlight", IconMap = Main.MiscIcons, Icon = "Empty", OnClick = function(enabled)
+				if enabled then Explorer.ClearWorldHighlight() end
+			end})
+			Main.CreateApp({Name = "Stop Path", IconMap = Main.MiscIcons, Icon = "Empty", OnClick = function(enabled)
+				if enabled then Explorer.StopPathPreview() end
+			end})
+			Main.CreateApp({Name = "Save Settings", IconMap = Main.MiscIcons, Icon = "Save", OnClick = function(enabled)
+				if enabled then Main.SaveCurrentSettings() end
+			end})
+			Main.CreateApp({Name = "Select NPCs", IconMap = Explorer.ClassIcons, Icon = "Model", OnClick = function(enabled)
+				if enabled then Main.Features.FindNPCs() end
+			end})
 		end
 
 		--Main.CreateApp({Name = "Secret Service Panel", IconMap = Main.LargeIcons, Icon = "Output", Window = SecretServicePanel.Window})
@@ -15946,7 +16319,7 @@ Main = (function()
 		"GetAttributeSnapshot", "CopyAttributeSnapshot", "GetPropertySnapshot", "CopyPropertySnapshot",
 		"GetTreeSnapshot", "CopyTreeSnapshot", "GetClassMetadata", "GetSelectionHealth",
 		"StartReplayRecording", "StopReplayRecording", "PlayReplay", "StopReplay", "OpenReplayStudio",
-		"ClearReplay", "SaveReplay", "LoadReplay", "GetReplayStatus"
+		"ClearReplay", "SaveReplay", "LoadReplay", "GetReplayStatus", "ToggleFreecam", "StopFreecam", "IsFreecamActive"
 	}
 
 	local function selectedNodes()
@@ -16529,6 +16902,151 @@ Main = (function()
 		if not Replay then return nil end
 		return {Recording = Replay.Recording, Playing = Replay.Playing, Frames = #Replay.Frames, Duration = Replay.Elapsed}
 	end
+	Main.Features.ToggleFreecam = function()
+		if not Freecam then return false end
+		return Freecam.Toggle()
+	end
+	Main.Features.StopFreecam = function()
+		if not Freecam then return false end
+		return Freecam.Stop()
+	end
+	Main.Features.IsFreecamActive = function()
+		return Freecam and Freecam.IsActive() or false
+	end
+
+	local function copyFeatureText(text)
+		if not env.setclipboard then return false end
+		env.setclipboard(tostring(text or ""))
+		return true
+	end
+	local function objectPosition(obj)
+		if obj:IsA("BasePart") then return obj.Position end
+		if obj:IsA("Model") then return obj:GetPivot().Position end
+		local part = obj:FindFirstChildWhichIsA("BasePart",true)
+		return part and part.Position
+	end
+	local function selectObjectPredicate(predicate)
+		return selectMatching(function(obj) return obj and predicate(obj) end)
+	end
+
+	local extraFeatures = {
+		GetPrimaryClass = function() local obj = selectedObjects()[1] return obj and obj.ClassName end,
+		GetPrimaryName = function() local obj = selectedObjects()[1] return obj and obj.Name end,
+		GetPrimaryParent = function() local obj = selectedObjects()[1] return obj and obj.Parent end,
+		GetPrimaryChildrenNames = function() local obj = selectedObjects()[1] local result = {} if obj then for _,child in ipairs(obj:GetChildren()) do result[#result+1] = child.Name end end return result end,
+		GetPrimaryAttributeNames = function() local obj = selectedObjects()[1] local result = {} if obj then for name in pairs(obj:GetAttributes()) do result[#result+1] = name end table.sort(result) end return result end,
+		GetSelectedCountByClass = function(className) local count = 0 for _,obj in ipairs(selectedObjects()) do if not className or obj:IsA(className) then count = count + 1 end end return count end,
+		GetSelectedPathsAndClasses = function() local result = {} for _,obj in ipairs(selectedObjects()) do result[#result+1] = Explorer.GetInstancePath(obj).." ["..obj.ClassName.."]" end return result end,
+		CopyPathsAndClasses = function() return copyFeatureText(table.concat(Main.Features.GetSelectedPathsAndClasses(),"\n")) end,
+		GetSelectedPositions = function() local result = {} for _,obj in ipairs(selectedObjects()) do local position = objectPosition(obj) if position then result[#result+1] = {Name = obj.Name, Position = position} end end return result end,
+		GetSelectionBounds = function() local minValue,maxValue local result = Main.Features.GetSelectedPositions() for _,entry in ipairs(result) do local p = entry.Position minValue = minValue and Vector3.new(math.min(minValue.X,p.X),math.min(minValue.Y,p.Y),math.min(minValue.Z,p.Z)) or p maxValue = maxValue and Vector3.new(math.max(maxValue.X,p.X),math.max(maxValue.Y,p.Y),math.max(maxValue.Z,p.Z)) or p end return minValue,maxValue end,
+		GetSelectionCenter = function() local minValue,maxValue = Main.Features.GetSelectionBounds() return minValue and (minValue+maxValue)/2 end,
+		GetSelectionDistance = function() local root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") local result = {} if not root then return result end for _,obj in ipairs(selectedObjects()) do local p = objectPosition(obj) if p then result[#result+1] = {Name = obj.Name, Distance = (root.Position-p).Magnitude} end end return result end,
+		GetNearestSelected = function() local result = Main.Features.GetSelectionDistance() table.sort(result,function(a,b) return a.Distance < b.Distance end) return result[1] end,
+		GetFarthestSelected = function() local result = Main.Features.GetSelectionDistance() table.sort(result,function(a,b) return a.Distance > b.Distance end) return result[1] end,
+		SelectWithChildren = function() return selectObjectPredicate(function(obj) return #obj:GetChildren() > 0 end) end,
+		SelectWithoutChildren = function() return selectObjectPredicate(function(obj) return #obj:GetChildren() == 0 end) end,
+		SelectLeaves = function() return selectObjectPredicate(function(obj) return #obj:GetChildren() == 0 end) end,
+		SelectModels = function() return selectObjectPredicate(function(obj) return obj:IsA("Model") end) end,
+		SelectBaseParts = function() return selectObjectPredicate(function(obj) return obj:IsA("BasePart") end) end,
+		SelectGuiObjects = function() return selectObjectPredicate(function(obj) return obj:IsA("GuiObject") end) end,
+		SelectHumanoids = function() return selectObjectPredicate(function(obj) return obj:IsA("Humanoid") end) end,
+		SelectAttachments = function() return selectObjectPredicate(function(obj) return obj:IsA("Attachment") end) end,
+		SelectFolders = function() return selectObjectPredicate(function(obj) return obj:IsA("Folder") end) end,
+		SelectServices = function() return Main.Features.FindServices() end,
+		SelectRemoteObjects = function() return selectObjectPredicate(function(obj) return obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") or obj:IsA("UnreliableRemoteEvent") end) end,
+		SelectValueObjects = function() return selectObjectPredicate(function(obj) return obj:IsA("ValueBase") end) end,
+		FindExact = function(query) return Main.Features.SelectByName(query,true) end,
+		FindPrefix = function(query) return selectObjectPredicate(function(obj) return type(query) == "string" and string.sub(string.lower(obj.Name),1,#query) == string.lower(query) end) end,
+		FindSuffix = function(query) return selectObjectPredicate(function(obj) return type(query) == "string" and string.sub(string.lower(obj.Name),-#query) == string.lower(query) end) end,
+		FindContains = function(query) return Main.Features.FindInstances(query) end,
+		FindByClassExact = function(className) return Main.Features.SelectByClass(className) end,
+		FindUnderSelection = function(name) local result = {} for _,obj in ipairs(selectedObjects()) do for _,child in ipairs(obj:GetDescendants()) do if not name or string.find(string.lower(child.Name),string.lower(name),1,true) then result[#result+1] = nodes[child] end end end Explorer.Selection:SetTable(result) return #result end,
+		FindDescendantsByName = function(name) return Main.Features.FindUnderSelection(name) end,
+		FindPlayers = function(query) return Main.Features.FindInstances(query,"Player") end,
+		FindNPCs = function(query) return selectObjectPredicate(function(obj) return obj:IsA("Model") and obj:FindFirstChildOfClass("Humanoid") and not game:GetService("Players"):GetPlayerFromCharacter(obj) and (not query or string.find(string.lower(obj.Name),string.lower(query),1,true)) end) end,
+		FindInteractives = function() return selectObjectPredicate(function(obj) return obj:IsA("ClickDetector") or obj:IsA("ProximityPrompt") or obj:IsA("TouchTransmitter") end) end,
+		FindAnimations = function(query) return Main.Features.FindInstances(query,"Animation") end,
+		FindTools = function(query) return Main.Features.FindInstances(query,"Tool") end,
+		FindConstraints = function() return selectObjectPredicate(function(obj) return obj:IsA("Constraint") end) end,
+		FindLights = function() return selectObjectPredicate(function(obj) return obj:IsA("Light") end) end,
+		FindCameras = function() return selectObjectPredicate(function(obj) return obj:IsA("Camera") end) end,
+		FindParticles = function() return selectObjectPredicate(function(obj) return obj:IsA("ParticleEmitter") end) end,
+		FindTextures = function() return selectObjectPredicate(function(obj) return obj:IsA("Texture") or obj:IsA("Decal") end) end,
+		FindSoundsById = function(assetId) return selectObjectPredicate(function(obj) return obj:IsA("Sound") and (not assetId or string.find(obj.SoundId,tostring(assetId),1,true)) end) end,
+		FindAttributes = function(attributeName) return selectObjectPredicate(function(obj) return attributeName and obj:GetAttribute(attributeName) ~= nil end) end,
+		GetObjectSummary = function() return Main.Features.InspectSelection() end,
+		GetAttributeCount = function() local count = 0 for _,obj in ipairs(selectedObjects()) do for _ in pairs(obj:GetAttributes()) do count = count + 1 end end return count end,
+		GetPropertyCount = function() local count = 0 for _,obj in ipairs(selectedObjects()) do local class = API.Classes[obj.ClassName] while class do count = count + #(class.Properties or {}) class = class.Superclass end end return count end,
+		GetHierarchyDepth = function() local obj = selectedObjects()[1] local count = 0 while obj and obj.Parent do count = count + 1 obj = obj.Parent end return count end,
+		GetSiblingCount = function() local obj = selectedObjects()[1] return obj and obj.Parent and #obj.Parent:GetChildren() or 0 end,
+		GetPathDepth = function() local path = Main.Features.GetPrimaryPath() return path and #string.split(path,".") or 0 end,
+		GetSelectionNamesCsv = function() return table.concat(Main.Features.GetSelectedNames(),", ") end,
+		GetSelectionPathsCsv = function() return table.concat(Main.Features.GetSelectionPaths(),", ") end,
+		GetSelectionJson = function() local ok,result = pcall(service.HttpService.JSONEncode,service.HttpService,Main.Features.GetSelectedFullNames()) return ok and result or nil end,
+		CopySelectionNamesCsv = function() return copyFeatureText(Main.Features.GetSelectionNamesCsv()) end,
+		CopySelectionPathsCsv = function() return copyFeatureText(Main.Features.GetSelectionPathsCsv()) end,
+		CopySelectionJson = function() return copyFeatureText(Main.Features.GetSelectionJson()) end,
+		CopyTreeDepth1 = function() return copyFeatureText(Main.Features.GetTreeSnapshot(1)) end,
+		CopyTreeDepth3 = function() return copyFeatureText(Main.Features.GetTreeSnapshot(3)) end,
+		CopyTreeDepth5 = function() return copyFeatureText(Main.Features.GetTreeSnapshot(5)) end,
+		CopyAncestryPaths = function() return copyFeatureText(Main.Features.GetAncestrySnapshot()) end,
+		ToggleSaveInstance = function() if SaveInstance.Window:IsVisible() then SaveInstance.Window:Hide() else SaveInstance.Window:Show() end return true end,
+		ToggleScriptViewer = function() if ScriptViewer.Window:IsVisible() then ScriptViewer.Window:Hide() else ScriptViewer.Window:Show() end return true end,
+		Toggle3DViewer = function() return Main.Features.ToggleModelViewer() end,
+		ToggleSettings = function() if SettingsWindow.Window:IsVisible() then SettingsWindow.Window:Hide() else SettingsWindow.Window:Show() end return true end,
+		HideReplayStudio = function() if Replay and Replay.Window then Replay.Window:Hide() return true end return false end,
+		SetHighlightTheme = function() Settings.Explorer.HighlightMode = "Theme" Main.SaveCurrentSettings() return true end,
+		SetHighlightCyan = function() Settings.Explorer.HighlightMode = "Cyan" Main.SaveCurrentSettings() return true end,
+		SetHighlightRed = function() Settings.Explorer.HighlightMode = "Red" Main.SaveCurrentSettings() return true end,
+		SetHighlightGold = function() Settings.Explorer.HighlightMode = "Gold" Main.SaveCurrentSettings() return true end,
+		SetHighlightGreen = function() Settings.Explorer.HighlightMode = "Green" Main.SaveCurrentSettings() return true end,
+		ClearHighlights = function() return Explorer.ClearWorldHighlight() end,
+		ClearPathPreview = function() return Explorer.StopPathPreview() end,
+		RefreshAndFocus = function() Main.Features.RefreshExplorer() return Main.Features.FocusSelection() end,
+		SaveCurrentSettingsNow = function() Main.SaveCurrentSettings() return true end,
+		GetThemeColors = function() return Settings.Theme end,
+		GetExplorerState = function() return {Sorting = Settings.Explorer.Sorting, AutoUpdateMode = Settings.Explorer.AutoUpdateMode, Selected = #selectedNodes()} end,
+		GetAppNames = function() local result = {} for name in pairs(Main.MenuApps) do result[#result+1] = name end table.sort(result) return result end,
+		GetMissingCount = function() return #Main.MissingEnv end,
+		GetEnvironmentFlags = function() local result = {} for name,value in pairs(env) do result[name] = type(value) end return result end,
+		SetSearchPattern = function(pattern) if not Explorer.GuiElems or not Explorer.GuiElems.SearchBar then return false end Explorer.GuiElems.SearchBar.Text = pattern or "" Explorer.DoSearch(pattern or "") return true end,
+		SearchLuaPattern = function(pattern) if type(pattern) ~= "string" or pattern == "" then return 0 end return selectObjectPredicate(function(obj) return pcall(string.match,obj.Name,pattern) and string.match(obj.Name,pattern) ~= nil end) end,
+		SelectByClasses = function(classes) local allowed = {} for _,className in ipairs(classes or {}) do allowed[className] = true end return selectObjectPredicate(function(obj) return allowed[obj.ClassName] or (allowed[obj.ClassName] and true) end) end,
+		GetBreadcrumbPath = function() return Main.Features.GetPrimaryPath() end,
+		GetChildCountBadge = function() local obj = selectedObjects()[1] return obj and #obj:GetChildren() or 0 end,
+		CollapseAll = function() return Main.Features.CollapseSelection() end,
+		ExpandAll = function() return Main.Features.ExpandSelection() end,
+		AddBookmark = function(name,tag) local obj = selectedObjects()[1] if not obj then return false end Main.Bookmarks = Main.Bookmarks or {} Main.Bookmarks[obj:GetFullName()] = {Name = name or obj.Name, Tag = tag or "", Path = Explorer.GetInstancePath(obj)} return true end,
+		RemoveBookmark = function() local obj = selectedObjects()[1] if not obj or not Main.Bookmarks then return false end Main.Bookmarks[obj:GetFullName()] = nil return true end,
+		GetBookmarks = function() return Main.Bookmarks or {} end,
+		VisitSelected = function() local obj = selectedObjects()[1] if not obj then return false end Main.RecentInstances = Main.RecentInstances or {} table.insert(Main.RecentInstances,1,{Name = obj.Name, Path = Explorer.GetInstancePath(obj), ClassName = obj.ClassName}) while #Main.RecentInstances > 25 do table.remove(Main.RecentInstances) end return true end,
+		GetRecentlyViewed = function() return Main.RecentInstances or {} end,
+		ExportHierarchyJson = function(depth) local ok,result = pcall(service.HttpService.JSONEncode,service.HttpService,Main.Features.GetTreeSnapshot(depth or 3)) if ok and env.setclipboard then env.setclipboard(result) end return ok and result or nil end,
+		GetWorkspaceStats = function() local result = {Instances = 0, Parts = 0, Scripts = 0, Models = 0, GuiObjects = 0} for _,obj in ipairs(game:GetDescendants()) do result.Instances = result.Instances + 1 if obj:IsA("BasePart") then result.Parts = result.Parts + 1 end if obj:IsA("LuaSourceContainer") then result.Scripts = result.Scripts + 1 end if obj:IsA("Model") then result.Models = result.Models + 1 end if obj:IsA("GuiObject") then result.GuiObjects = result.GuiObjects + 1 end end return result end,
+		SelectService = function(name) local serviceObject = name and game:GetService(name) return serviceObject and selectObjectPredicate(function(obj) return obj == serviceObject end) or 0 end,
+		GetPlayerTable = function() local result = {} for _,player in ipairs(game:GetService("Players"):GetPlayers()) do result[#result+1] = {Name = player.Name,DisplayName = player.DisplayName,UserId = player.UserId,Team = player.Team and player.Team.Name or ""} end return result end,
+		FocusCharacter = function(playerName) local player = playerName and game:GetService("Players"):FindFirstChild(playerName) or plr if player and player.Character and nodes[player.Character] then selection:Set(nodes[player.Character]) Explorer.ViewNode(nodes[player.Character]) return true end return false end,
+		GetPlaceInfo = function() return {PlaceId = game.PlaceId,GameId = game.GameId,Name = game.Name,JobId = game.JobId} end,
+		ToggleHighlightThroughWalls = function() Settings.Explorer.HighlightThroughWalls = not Settings.Explorer.HighlightThroughWalls Main.SaveCurrentSettings() return Settings.Explorer.HighlightThroughWalls end,
+		RefreshHighlight = function() local obj = selectedObjects()[1] if obj then return Explorer.HighlightObject(obj) end return false end,
+		StartPathPreview = function() local obj = selectedObjects()[1] return obj and Explorer.ShowPathPreview(obj) or false end,
+		IsPathPreviewActive = function() return pathPreviewRunning end,
+		GetFreecamSettings = function() return {Speed = Settings.Explorer.FreecamSpeed,Sensitivity = Settings.Explorer.FreecamSensitivity,Active = Freecam and Freecam.IsActive() or false} end,
+		StartFreecam = function() return Freecam and Freecam.Start() or false end,
+		GetReplayFrameCount = function() return Replay and #Replay.Frames or 0 end,
+		GetReplayDuration = function() return Replay and Replay.Elapsed or 0 end,
+		ClearRecentHistory = function() Main.RecentInstances = {} return true end,
+		ClearBookmarks = function() Main.Bookmarks = {} return true end,
+		CopyBreadcrumb = function() return copyFeatureText(Main.Features.GetBreadcrumbPath()) end,
+		CopyWorkspaceStats = function() return copyFeatureText(service.HttpService:JSONEncode(Main.Features.GetWorkspaceStats())) end,
+		CopyPlayerTable = function() return copyFeatureText(service.HttpService:JSONEncode(Main.Features.GetPlayerTable())) end,
+		CopyPlaceInfo = function() return copyFeatureText(service.HttpService:JSONEncode(Main.Features.GetPlaceInfo())) end
+	}
+	for featureName,feature in pairs(extraFeatures) do
+		Main.Features[featureName] = feature
+		Main.FeatureOrder[#Main.FeatureOrder+1] = featureName
+	end
 	Main.RunFeature = function(name,...)
 		local feature = Main.Features[name]
 		if type(feature) ~= "function" then return false,"Unknown feature: "..tostring(name) end
@@ -16692,6 +17210,7 @@ Main = (function()
 
 		-- Init window system, create main menu, show explorer and properties
 		Lib.Window.Init()
+		Main.InitFreecam()
 		local replayLoaded,replayError = xpcall(Main.InitReplay,function(err)
 			return debug and debug.traceback and debug.traceback(tostring(err),2) or tostring(err)
 		end)
