@@ -15534,6 +15534,7 @@ Main = (function()
 		local httpService = service.HttpService
 		local replay = {
 			Frames = {},
+			ActorSources = {},
 			Recording = false,
 			AutoRecord = true,
 			Playing = false,
@@ -15545,7 +15546,10 @@ Main = (function()
 			SavedCameraType = nil,
 			SavedCameraSubject = nil,
 			Status = nil,
-			Progress = nil
+			Progress = nil,
+			GhostFolder = nil,
+			ActorList = {},
+			ActorScanTime = -math.huge
 		}
 
 		local function setStatus(text)
@@ -15556,8 +15560,37 @@ Main = (function()
 			replay.Progress.Size = UDim2.new(math.clamp(value,0,1),0,1,0)
 		end
 
+		local function clearGhosts()
+			if replay.GhostFolder then replay.GhostFolder:Destroy() replay.GhostFolder = nil end
+		end
+
+		local function captureActors()
+			local actors = {}
+			if replay.Elapsed - replay.ActorScanTime >= 0.5 then
+				table.clear(replay.ActorList)
+				for _,model in ipairs(workspace:GetDescendants()) do
+					if model:IsA("Model") then
+						local humanoid = model:FindFirstChildOfClass("Humanoid")
+						local root = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
+						if humanoid and root and root:IsA("BasePart") then replay.ActorList[#replay.ActorList+1] = model end
+					end
+				end
+				replay.ActorScanTime = replay.Elapsed
+			end
+			for _,model in ipairs(replay.ActorList) do
+				local root = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
+				if root and root:IsA("BasePart") then
+					local x,y,z,r00,r01,r02,r10,r11,r12,r20,r21,r22 = root.CFrame:GetComponents()
+					local key = model:GetFullName()
+					actors[#actors+1] = {K = key, C = {x,y,z,r00,r01,r02,r10,r11,r12,r20,r21,r22}}
+					replay.ActorSources[key] = model
+			end
+			return actors
+		end
+
 		local function stopPlayback()
 			if replay.PlaybackConnection then replay.PlaybackConnection:Disconnect() replay.PlaybackConnection = nil end
+			clearGhosts()
 			if replay.Playing then
 				local camera = workspace.CurrentCamera
 				camera.CameraType = replay.SavedCameraType or Enum.CameraType.Custom
@@ -15581,6 +15614,9 @@ Main = (function()
 			stopPlayback()
 			if reset then
 				table.clear(replay.Frames)
+				table.clear(replay.ActorSources)
+				table.clear(replay.ActorList)
+				replay.ActorScanTime = -math.huge
 				replay.Elapsed = 0
 				replay.LastCapture = 0
 			end
@@ -15592,7 +15628,7 @@ Main = (function()
 				replay.LastCapture = replay.Elapsed
 				local camera = workspace.CurrentCamera
 				local x,y,z,r00,r01,r02,r10,r11,r12,r20,r21,r22 = camera.CFrame:GetComponents()
-				replay.Frames[#replay.Frames+1] = {T = replay.Elapsed, C = {x,y,z,r00,r01,r02,r10,r11,r12,r20,r21,r22}, F = camera.FieldOfView}
+				replay.Frames[#replay.Frames+1] = {T = replay.Elapsed, C = {x,y,z,r00,r01,r02,r10,r11,r12,r20,r21,r22}, F = camera.FieldOfView, A = captureActors()}
 				setStatus("Recording "..string.format("%.1fs",replay.Elapsed))
 			end)
 		end
@@ -15602,6 +15638,24 @@ Main = (function()
 			stopRecording(false)
 			stopPlayback()
 			local camera = workspace.CurrentCamera
+			clearGhosts()
+			local ghostFolder = Instance.new("Folder")
+			ghostFolder.Name = "DexReplayGhosts"
+			ghostFolder.Parent = workspace
+			replay.GhostFolder = ghostFolder
+			local ghosts = {}
+			for key,model in pairs(replay.ActorSources) do
+				local ok,ghost = pcall(model.Clone,model)
+				if ok and ghost then
+					ghost.Name = "ReplayGhost_"..model.Name
+					for _,part in ipairs(ghost:GetDescendants()) do
+						if part:IsA("BasePart") then part.Anchored = true part.CanCollide = false part.Massless = true end
+						if part:IsA("Script") or part:IsA("LocalScript") then part.Disabled = true end
+					end
+					ghost.Parent = ghostFolder
+					ghosts[key] = ghost
+				end
+			end
 			replay.SavedCameraType = camera.CameraType
 			replay.SavedCameraSubject = camera.CameraSubject
 			camera.CameraType = Enum.CameraType.Scriptable
@@ -15617,6 +15671,10 @@ Main = (function()
 				if elapsed >= last.T then
 					camera.CFrame = CFrame.new(unpack(last.C))
 					camera.FieldOfView = last.F
+					for _,actor in ipairs(last.A or {}) do
+						local ghost = ghosts[actor.K]
+						if ghost then ghost:PivotTo(CFrame.new(unpack(actor.C))) end
+					end
 					stopPlayback()
 					if replay.AutoRecord then startRecording(false) end
 					return
@@ -15626,11 +15684,12 @@ Main = (function()
 					if replay.Frames[i].T >= elapsed then left,right = replay.Frames[i-1],replay.Frames[i] break end
 				end
 				local alpha = (elapsed-left.T)/math.max(right.T-left.T,0.0001)
-				local lc,rc = left.C,right.C
-				local values = {}
-				for i = 1,12 do values[i] = lc[i] + (rc[i]-lc[i])*alpha end
-				camera.CFrame = CFrame.new(unpack(values))
+				camera.CFrame = CFrame.new(unpack(left.C)):Lerp(CFrame.new(unpack(right.C)),alpha)
 				camera.FieldOfView = left.F + (right.F-left.F)*alpha
+				for _,actor in ipairs(left.A or {}) do
+					local ghost = ghosts[actor.K]
+					if ghost then ghost:PivotTo(CFrame.new(unpack(actor.C))) end
+				end
 				setProgress((elapsed-playbackOrigin)/math.max(last.T-playbackOrigin,0.0001))
 				if elapsed >= last.T and replay.AutoRecord then startRecording(false) end
 			end)
