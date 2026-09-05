@@ -941,8 +941,8 @@ local function main()
 			highlight.Adornee = target
 			highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 			highlight.FillColor = highlightColor
-			highlight.FillTransparency = 0.72
-			highlight.OutlineColor = Settings.Explorer.HighlightMode == "Theme" and Settings.Theme.ListSelection or highlightColor
+			highlight.FillTransparency = 1
+			highlight.OutlineColor = Color3.fromRGB(255,45,45)
 			highlight.OutlineTransparency = 0
 			highlight.Parent = workspace
 			activeWorldHighlights[#activeWorldHighlights+1] = highlight
@@ -999,14 +999,22 @@ local function main()
 			if not pathPreviewRunning or not pathPreviewFolder.Parent then return end
 			local currentRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
 			if not currentRoot or not targetPart.Parent then Explorer.StopPathPreview() return end
-			local path = service.PathfindingService:CreatePath({AgentRadius = 2, AgentHeight = 5, AgentCanJump = true, WaypointSpacing = 3})
-			local ok = pcall(path.ComputeAsync,path,currentRoot.Position,targetPart.Position)
+			local pathOk,path = pcall(service.PathfindingService.CreatePath,service.PathfindingService,{AgentRadius = 2, AgentHeight = 5, AgentCanJump = true, WaypointSpacing = 3})
+			local ok = pathOk and pcall(path.ComputeAsync,path,currentRoot.Position,targetPart.Position)
 			clearPathPreviewVisuals()
 			local waypoints
-			if ok and path.Status == Enum.PathStatus.Success then
+			if pathOk and ok and path.Status == Enum.PathStatus.Success then
 				waypoints = path:GetWaypoints()
 			else
 				waypoints = {{Position = currentRoot.Position},{Position = targetPart.Position}}
+			end
+			local rayParams = RaycastParams.new()
+			rayParams.FilterType = Enum.RaycastFilterType.Exclude
+			rayParams.FilterDescendantsInstances = {plr.Character,pathPreviewFolder,targetPart.Parent}
+			for _,waypoint in ipairs(waypoints) do
+				local origin = waypoint.Position + Vector3.new(0,50,0)
+				local hit = workspace:Raycast(origin,Vector3.new(0,-200,0),rayParams)
+				waypoint.Position = (hit and hit.Position or waypoint.Position) + Vector3.new(0,0.16,0)
 			end
 			for index = 1,#waypoints do
 				local point = Instance.new("Part")
@@ -15722,7 +15730,7 @@ Main = (function()
 	Main.InitFreecam = function()
 		local inputService = service.UserInputService
 		local runService = service.RunService
-		local state = {Active = false, Connection = nil, InputBegan = nil, InputEnded = nil, Position = nil, Yaw = 0, Pitch = 0, CameraType = nil, CameraSubject = nil, MouseBehavior = nil, Keys = {}}
+		local state = {Active = false, Connection = nil, InputBegan = nil, InputEnded = nil, Position = nil, Yaw = 0, Pitch = 0, CameraType = nil, CameraSubject = nil, MouseBehavior = nil, Keys = {}, Root = nil, RootAnchored = false, Humanoid = nil, WalkSpeed = nil, JumpPower = nil, JumpHeight = nil, AutoRotate = nil}
 		local keyMap = {
 			[Enum.KeyCode.W] = Vector3.new(0,0,-1), [Enum.KeyCode.S] = Vector3.new(0,0,1),
 			[Enum.KeyCode.A] = Vector3.new(-1,0,0), [Enum.KeyCode.D] = Vector3.new(1,0,0),
@@ -15737,6 +15745,13 @@ Main = (function()
 			local camera = workspace.CurrentCamera
 			camera.CameraType = state.CameraType or Enum.CameraType.Custom
 			if state.CameraSubject then camera.CameraSubject = state.CameraSubject end
+			if state.Root and state.Root.Parent then state.Root.Anchored = state.RootAnchored end
+			if state.Humanoid and state.Humanoid.Parent then
+				state.Humanoid.WalkSpeed = state.WalkSpeed
+				state.Humanoid.JumpPower = state.JumpPower
+				state.Humanoid.JumpHeight = state.JumpHeight
+				state.Humanoid.AutoRotate = state.AutoRotate
+			end
 			inputService.MouseBehavior = state.MouseBehavior or Enum.MouseBehavior.Default
 			state.Active = false
 			state.Connection, state.InputBegan, state.InputEnded = nil,nil,nil
@@ -15753,6 +15768,20 @@ Main = (function()
 			state.CameraSubject = camera.CameraSubject
 			state.MouseBehavior = inputService.MouseBehavior
 			state.Position = camera.CFrame.Position
+			state.Root = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+			state.Humanoid = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+			if state.Root then state.RootAnchored = state.Root.Anchored state.Root.Anchored = true end
+			if state.Humanoid then
+				state.WalkSpeed = state.Humanoid.WalkSpeed
+				state.JumpPower = state.Humanoid.JumpPower
+				state.JumpHeight = state.Humanoid.JumpHeight
+				state.AutoRotate = state.Humanoid.AutoRotate
+				state.Humanoid.WalkSpeed = 0
+				state.Humanoid.JumpPower = 0
+				state.Humanoid.JumpHeight = 0
+				state.Humanoid.AutoRotate = false
+				state.Humanoid:Move(Vector3.zero)
+			end
 			local look = camera.CFrame.LookVector
 			state.Yaw = math.atan2(-look.X,-look.Z)
 			state.Pitch = math.asin(math.clamp(look.Y,-1,1))
