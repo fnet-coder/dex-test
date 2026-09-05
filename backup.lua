@@ -937,25 +937,20 @@ local function main()
 		local highlightColor = Settings.Explorer.HighlightMode == "Theme" and Settings.Theme.Highlight or highlightColors[Settings.Explorer.HighlightMode] or Settings.Theme.Highlight
 		for _,target in ipairs(targets) do
 			local highlight = Instance.new("Highlight")
-			highlight.Name = "DexExplorerHighlight"
-			highlight.Adornee = target
+			highlight.Name = "PlayerHighlight"
+			if target:IsA("Model") then
+				highlight.Parent = target
+			else
+				highlight.Adornee = target
+				highlight.Parent = workspace
+			end
 			highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-			highlight.FillColor = highlightColor
-			highlight.FillTransparency = 1
-			highlight.OutlineColor = Color3.fromRGB(255,45,45)
+			highlight.FillColor = Color3.fromRGB(255,0,0)
+			highlight.FillTransparency = 0.5
+			highlight.OutlineColor = Color3.fromRGB(255,255,255)
 			highlight.OutlineTransparency = 0
-			highlight.Parent = workspace
 			activeWorldHighlights[#activeWorldHighlights+1] = highlight
 			activeWorldHighlight = highlight
-			local box = Instance.new("SelectionBox")
-			box.Name = "DexExplorerHighlightBox"
-			box.Adornee = target
-			box.LineThickness = 0.05
-			box.Color3 = Color3.fromRGB(255,45,45)
-			box.SurfaceColor3 = Color3.fromRGB(255,45,45)
-			box.SurfaceTransparency = 1
-			box.Parent = workspace
-			activeWorldBoxes[#activeWorldBoxes+1] = box
 		end
 		activeWorldObject = obj
 		return true
@@ -15730,7 +15725,7 @@ Main = (function()
 	Main.InitFreecam = function()
 		local inputService = service.UserInputService
 		local runService = service.RunService
-		local state = {Active = false, Connection = nil, InputBegan = nil, InputEnded = nil, Position = nil, Yaw = 0, Pitch = 0, CameraType = nil, CameraSubject = nil, MouseBehavior = nil, Keys = {}, Root = nil, RootAnchored = false, Humanoid = nil, WalkSpeed = nil, JumpPower = nil, JumpHeight = nil, AutoRotate = nil}
+		local state = {Active = false, Connection = nil, InputBegan = nil, InputEnded = nil, InputChanged = nil, Position = nil, Yaw = 0, Pitch = 0, MouseDelta = Vector2.zero, CameraType = nil, CameraSubject = nil, MouseBehavior = nil, Keys = {}, Root = nil, RootAnchored = false, Humanoid = nil, WalkSpeed = nil, JumpPower = nil, JumpHeight = nil, AutoRotate = nil}
 		local keyMap = {
 			[Enum.KeyCode.W] = Vector3.new(0,0,-1), [Enum.KeyCode.S] = Vector3.new(0,0,1),
 			[Enum.KeyCode.A] = Vector3.new(-1,0,0), [Enum.KeyCode.D] = Vector3.new(1,0,0),
@@ -15742,6 +15737,8 @@ Main = (function()
 			if state.Connection then state.Connection:Disconnect() end
 			if state.InputBegan then state.InputBegan:Disconnect() end
 			if state.InputEnded then state.InputEnded:Disconnect() end
+			if state.InputChanged then state.InputChanged:Disconnect() end
+			runService:UnbindFromRenderStep("DexFreecam")
 			local camera = workspace.CurrentCamera
 			camera.CameraType = state.CameraType or Enum.CameraType.Custom
 			if state.CameraSubject then camera.CameraSubject = state.CameraSubject end
@@ -15754,7 +15751,7 @@ Main = (function()
 			end
 			inputService.MouseBehavior = state.MouseBehavior or Enum.MouseBehavior.Default
 			state.Active = false
-			state.Connection, state.InputBegan, state.InputEnded = nil,nil,nil
+			state.Connection, state.InputBegan, state.InputEnded, state.InputChanged = nil,nil,nil,nil
 			table.clear(state.Keys)
 			return true
 		end
@@ -15793,9 +15790,13 @@ Main = (function()
 				if input.KeyCode == Enum.KeyCode.Escape then stop() end
 			end)
 			state.InputEnded = inputService.InputEnded:Connect(function(input) state.Keys[input.KeyCode] = nil end)
-			state.Connection = runService.RenderStepped:Connect(function(dt)
+			state.InputChanged = inputService.InputChanged:Connect(function(input)
+				if input.UserInputType == Enum.UserInputType.MouseMovement then state.MouseDelta = state.MouseDelta + input.Delta end
+			end)
+			runService:BindToRenderStep("DexFreecam",Enum.RenderPriority.Camera.Value + 1,function(dt)
 				if not state.Active then return end
-				local delta = inputService:GetMouseDelta()
+				local delta = state.MouseDelta
+				state.MouseDelta = Vector2.zero
 				state.Yaw = state.Yaw - delta.X * 0.0025
 				state.Pitch = math.clamp(state.Pitch - delta.Y * 0.0025,-1.5,1.5)
 				local rotation = CFrame.fromOrientation(state.Pitch,state.Yaw,0)
