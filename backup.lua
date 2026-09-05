@@ -1026,11 +1026,13 @@ local function main()
 				waypoints = {{Position = currentRoot.Position},{Position = targetPart.Position}}
 			end
 			local rayParams = RaycastParams.new()
-			rayParams.FilterType = Enum.RaycastFilterType.Exclude
+			local filterOk = pcall(function() rayParams.FilterType = Enum.RaycastFilterType.Exclude end)
+			if not filterOk then rayParams.FilterType = Enum.RaycastFilterType.Blacklist end
 			rayParams.FilterDescendantsInstances = {plr.Character,pathPreviewFolder,targetPart.Parent}
 			for _,waypoint in ipairs(waypoints) do
 				local origin = waypoint.Position + Vector3.new(0,50,0)
-				local hit = workspace:Raycast(origin,Vector3.new(0,-200,0),rayParams)
+				local rayOk,hit = pcall(workspace.Raycast,workspace,origin,Vector3.new(0,-200,0),rayParams)
+				if not rayOk then hit = nil end
 				waypoint.Position = (hit and hit.Position or waypoint.Position) + Vector3.new(0,0.16,0)
 			end
 			for index = 1,#waypoints do
@@ -15813,7 +15815,7 @@ Main = (function()
 			end)
 			state.InputEnded = inputService.InputEnded:Connect(function(input) state.Keys[input.KeyCode] = nil end)
 			state.InputChanged = inputService.InputChanged:Connect(function(input)
-				if input.UserInputType == Enum.UserInputType.MouseMovement then state.MouseDelta = state.MouseDelta + input.Delta end
+				if input.UserInputType == Enum.UserInputType.MouseMovement then state.MouseDelta = state.MouseDelta + Vector2.new(input.Delta.X,input.Delta.Y) end
 			end)
 			runService:BindToRenderStep("DexFreecam",Enum.RenderPriority.Camera.Value + 1,function(dt)
 				if not state.Active then return end
