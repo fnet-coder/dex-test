@@ -15624,13 +15624,20 @@ Main = (function()
 			replay.Recording = true
 			setStatus("Recording...")
 			replay.CaptureConnection = runService.RenderStepped:Connect(function(dt)
-				replay.Elapsed = replay.Elapsed + dt
-				if replay.Elapsed - replay.LastCapture < 1/30 then return end
-				replay.LastCapture = replay.Elapsed
-				local camera = workspace.CurrentCamera
-				local x,y,z,r00,r01,r02,r10,r11,r12,r20,r21,r22 = camera.CFrame:GetComponents()
-				replay.Frames[#replay.Frames+1] = {T = replay.Elapsed, C = {x,y,z,r00,r01,r02,r10,r11,r12,r20,r21,r22}, F = camera.FieldOfView, A = captureActors()}
-				setStatus("Recording "..string.format("%.1fs",replay.Elapsed))
+				local captureOk,captureError = pcall(function()
+					replay.Elapsed = replay.Elapsed + dt
+					if replay.Elapsed - replay.LastCapture < 1/30 then return end
+					replay.LastCapture = replay.Elapsed
+					local camera = workspace.CurrentCamera
+					if not camera then return end
+					local x,y,z,r00,r01,r02,r10,r11,r12,r20,r21,r22 = camera.CFrame:GetComponents()
+					replay.Frames[#replay.Frames+1] = {T = replay.Elapsed, C = {x,y,z,r00,r01,r02,r10,r11,r12,r20,r21,r22}, F = camera.FieldOfView, A = captureActors()}
+					setStatus("Recording "..string.format("%.1fs",replay.Elapsed))
+				end)
+				if not captureOk then
+					warn("Replay capture disabled: "..tostring(captureError))
+					stopRecording(true)
+				end
 			end)
 		end
 
